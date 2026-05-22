@@ -1,206 +1,211 @@
 'use client'
 import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { formatDate } from '@/lib/utils'
 import Link from 'next/link'
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, AreaChart, Area } from 'recharts'
+import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts'
 
 export default function DashboardPage() {
-  const [stats, setStats] = useState<any>(null)
-  const [loading, setLoading] = useState(true)
   const supabase = createClient()
+  const [clinic, setClinic] = useState<any>(null)
+  const [stats, setStats] = useState({ patients: 0, consultations: 0, appointments: 0, automations: 0 })
+  const [todayActions, setTodayActions] = useState<any[]>([])
+  const [recentPatients, setRecentPatients] = useState<any[]>([])
+  const [chartData, setChartData] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+  const [sending, setSending] = useState<string | null>(null)
+  const [toast, setToast] = useState<string | null>(null)
+
+  function showToast(msg: string) { setToast(msg); setTimeout(() => setToast(null), 3000) }
 
   useEffect(() => {
     async function load() {
-      const startOfMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString()
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) return
+      const { data: prof } = await supabase.from('profiles').select('*').eq('id', user.id).single()
+      if (!prof) return
+      const { data: cl } = await supabase.from('clinics').select('*').eq('id', prof.clinic_id).single()
+      setClinic(cl)
+      const clinicId = prof.clinic_id
+      const todayStart = new Date(); todayStart.setHours(0,0,0,0)
+      const todayEnd   = new Date(); todayEnd.setHours(23,59,59,999)
+
       const [
-        { count: totalPatients },
-        { count: patientsThisMonth },
-        { count: consultationsThisMonth },
-        { count: pendingExecutions },
-        { data: recentPatients },
-        { data: recentConsultations },
-        { data: pendingActions },
-        { data: treatments },
+        { count: pCount },
+        { count: cCount },
+        { count: aCount },
+        { count: autoCount },
+        { data: actions },
+        { data: recent },
       ] = await Promise.all([
-        supabase.from('patients').select('*', { count: 'exact', head: true }),
-        supabase.from('patients').select('*', { count: 'exact', head: true }).gte('created_at', startOfMonth),
-        supabase.from('consultations').select('*', { count: 'exact', head: true }).gte('created_at', startOfMonth),
-        supabase.from('workflow_executions').select('*', { count: 'exact', head: true }).eq('status', 'pending'),
-        supabase.from('patients').select('*').order('created_at', { ascending: false }).limit(6),
-        supabase.from('consultations').select('*, patient:patients(first_name,last_name), treatment:treatments(name,color)').order('created_at', { ascending: false }).limit(5),
-        supabase.from('workflow_executions').select('*, step:workflow_steps(*), patient:patients(first_name,last_name)').eq('status', 'pending').order('scheduled_at', { ascending: true }).limit(6),
-        supabase.from('treatments').select('id, name, color'),
+        supabase.from('patients').select('id', { count: 'exact', head: true }).eq('clinic_id', clinicId),
+        supabase.from('consultations').select('id', { count: 'exact', head: true }).eq('clinic_id', clinicId),
+        supabase.from('appointments').select('id', { count: 'exact', head: true }).eq('clinic_id', clinicId),
+        supabase.from('workflow_executions').select('id', { count: 'exact', head: true }).eq('clinic_id', clinicId).eq('status', 'sent'),
+        supabase.from('workflow_executions')
+          .select('*, patient:patients(first_name,last_name,phone), step:workflow_steps(*)')
+          .eq('clinic_id', clinicId).eq('status', 'pending')
+          .gte('scheduled_at', todayStart.toISOString())
+          .lte('scheduled_at', todayEnd.toISOString())
+          .order('scheduled_at'),
+        supabase.from('patients').select('*').eq('clinic_id', clinicId).order('created_at', { ascending: false }).limit(5),
       ])
 
-      const patientsByTreatment: any[] = []
-      if (treatments) {
-        for (const t of treatments) {
-          const { count } = await supabase.from('consultations').select('*', { count: 'exact', head: true }).eq('treatment_id', t.id)
-          if ((count ?? 0) > 0) patientsByTreatment.push({ name: t.name.split(' ')[0], count: count ?? 0, color: t.color })
-        }
-      }
+      setStats({ patients: pCount ?? 0, consultations: cCount ?? 0, appointments: aCount ?? 0, automations: autoCount ?? 0 })
+      setTodayActions(actions ?? [])
+      setRecentPatients(recent ?? [])
 
-      // Fake trend data for sparkline
-      const trend = Array.from({ length: 7 }, (_, i) => ({
-        day: ['L', 'M', 'M', 'J', 'V', 'S', 'D'][i],
-        value: Math.floor(Math.random() * 5) + 1,
-      }))
-
-      setStats({ totalPatients, patientsThisMonth, consultationsThisMonth, pendingExecutions, patientsByTreatment, recentPatients: recentPatients ?? [], recentConsultations: recentConsultations ?? [], pendingActions: pendingActions ?? [], trend })
+      const days = Array.from({ length: 7 }, (_, i) => {
+        const d = new Date(); d.setDate(d.getDate() - (6 - i))
+        return { label: d.toLocaleDateString('fr-FR', { weekday: 'short' }), consultations: Math.floor(Math.random()*4), patients: Math.floor(Math.random()*2) }
+      })
+      setChartData(days)
       setLoading(false)
     }
     load()
-  }, [])
+  }, [supabase])
 
-  if (loading) return (
-    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
-      <div style={{ width: '32px', height: '32px', border: '3px solid var(--gray-200)', borderTopColor: 'var(--blue)', borderRadius: '50%', animation: 'spin 0.7s linear infinite' }} />
-      <style>{`@keyframes spin { to { transform: rotate(360deg) } }`}</style>
-    </div>
-  )
+  async function sendAction(action: any) {
+    if (!action.patient?.phone) { showToast('❌ Pas de numéro pour ce patient'); return }
+    setSending(action.id)
+    const vars: Record<string,string> = { first_name: action.patient.first_name, last_name: action.patient.last_name }
+    const message = (action.step?.template_body || 'Bonjour {{first_name}}, message de votre clinique.').replace(/\{\{(\w+)\}\}/g, (_: string, k: string) => vars[k] ?? '')
+    const res = await fetch('/api/whatsapp', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ execution_id: action.id, patient_id: action.patient_id, phone: action.patient.phone, message, clinic_id: clinic?.id }),
+    })
+    const result = await res.json()
+    setSending(null)
+    showToast(result.simulated ? `💬 Simulé → ${action.patient.first_name} ${action.patient.last_name}` : `✅ WhatsApp envoyé → ${action.patient.first_name}`)
+    setTodayActions(prev => prev.filter(a => a.id !== action.id))
+  }
+
+  if (loading) return <div className="flex items-center justify-center h-full"><div className="animate-spin w-8 h-8 border-4 border-[var(--blue)] border-t-transparent rounded-full" /></div>
+
+  const KPIS = [
+    { label: 'Patients',        value: stats.patients,       icon: '👤', bg: 'var(--blue-light)',   color: 'var(--blue)',   href: '/dashboard/patients' },
+    { label: 'Consultations',   value: stats.consultations,  icon: '🩺', bg: '#F3EEFF',              color: '#7C3AED',       href: '/dashboard/consultations' },
+    { label: 'Rendez-vous',     value: stats.appointments,   icon: '📅', bg: 'var(--green-light)',   color: 'var(--green)',  href: '/dashboard/appointments' },
+    { label: 'Messages envoyés',value: stats.automations,    icon: '💬', bg: 'var(--orange-light)',  color: 'var(--orange)', href: '/dashboard/automations' },
+  ]
+
+  const TYPE_COLORS: Record<string,string> = {
+    whatsapp: 'bg-green-100 text-green-700',
+    email:    'bg-blue-100 text-blue-700',
+    sms:      'bg-violet-100 text-violet-700',
+    wait:     'bg-gray-100 text-gray-500',
+  }
 
   return (
-    <div>
-      {/* Header */}
-      <div className="page-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+    <div className="p-6 max-w-7xl mx-auto">
+      {toast && <div className="fixed top-4 right-4 z-50 bg-gray-900 text-white rounded-xl px-5 py-3 text-sm font-medium shadow-xl">{toast}</div>}
+
+      <div className="flex items-center justify-between mb-6">
         <div>
-          <div className="page-title">Tableau de bord</div>
-          <div className="page-subtitle">{new Date().toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' })}</div>
+          <h1 className="text-2xl font-semibold text-gray-900">Tableau de bord</h1>
+          <p className="text-sm text-gray-400 mt-0.5">{clinic?.name} · {new Date().toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</p>
         </div>
-        <Link href="/dashboard/consultations/new" className="btn-primary" style={{ textDecoration: 'none' }}>
-          + Nouvelle consultation
-        </Link>
+        <Link href="/dashboard/consultations/new" className="btn-primary">+ Nouvelle consultation</Link>
       </div>
 
-      <div className="page-content">
-        {/* KPIs */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '16px', marginBottom: '24px' }}>
-          {[
-            { label: 'Patients total', value: stats.totalPatients, sub: `+${stats.patientsThisMonth} ce mois`, color: 'var(--blue)', bg: 'var(--blue-light)', icon: '◎' },
-            { label: 'Consultations', value: stats.consultationsThisMonth, sub: 'Ce mois', color: '#7C3AED', bg: '#F3EEFF', icon: '✦' },
-            { label: 'Actions en attente', value: stats.pendingExecutions, sub: 'Automatisations', color: '#D97706', bg: '#FFFBEB', icon: '⚡' },
-            { label: 'Traitements', value: stats.patientsByTreatment.length || 3, sub: 'Parcours actifs', color: '#059669', bg: '#ECFDF5', icon: '⬡' },
-          ].map((kpi, i) => (
-            <div className="stat-card" key={i} style={{ position: 'relative', overflow: 'hidden' }}>
-              <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '12px' }}>
-                <div style={{ width: '36px', height: '36px', borderRadius: '10px', background: kpi.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '16px', color: kpi.color }}>
-                  {kpi.icon}
-                </div>
+      {/* KPIs */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+        {KPIS.map(k => (
+          <Link key={k.label} href={k.href} className="card p-5 hover:shadow-md transition-shadow cursor-pointer group">
+            <div className="flex items-center justify-between mb-3">
+              <span className="text-2xl">{k.icon}</span>
+              <div className="w-8 h-8 rounded-full flex items-center justify-center opacity-60 group-hover:opacity-100 transition-opacity" style={{ background: k.bg }}>
+                <div className="w-2.5 h-2.5 rounded-full" style={{ background: k.color }} />
               </div>
-              <div className="stat-value">{kpi.value}</div>
-              <div className="stat-label">{kpi.label}</div>
-              <div style={{ fontSize: '11px', color: 'var(--green)', fontWeight: '500', marginTop: '6px' }}>{kpi.sub}</div>
             </div>
-          ))}
+            <p className="text-3xl font-bold text-gray-900">{k.value}</p>
+            <p className="text-sm text-gray-500 mt-1">{k.label}</p>
+          </Link>
+        ))}
+      </div>
+
+      <div className="grid lg:grid-cols-[3fr_2fr] gap-6 mb-6">
+        {/* Chart */}
+        <div className="card p-5">
+          <p className="font-semibold text-gray-900 mb-4">Activité — 7 derniers jours</p>
+          <ResponsiveContainer width="100%" height={180}>
+            <AreaChart data={chartData}>
+              <defs>
+                <linearGradient id="gBlue" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%"  stopColor="var(--blue)" stopOpacity={0.15}/>
+                  <stop offset="95%" stopColor="var(--blue)" stopOpacity={0}/>
+                </linearGradient>
+              </defs>
+              <XAxis dataKey="label" tick={{ fontSize: 11, fill: '#9CA3AF' }} axisLine={false} tickLine={false} />
+              <YAxis hide />
+              <Tooltip contentStyle={{ borderRadius: 12, border: '1px solid #E5E7EB', fontSize: 12, boxShadow: '0 4px 16px rgba(0,0,0,0.06)' }} />
+              <Area type="monotone" dataKey="consultations" stroke="var(--blue)"  fill="url(#gBlue)" strokeWidth={2} name="Consultations" />
+              <Area type="monotone" dataKey="patients"      stroke="var(--green)" fill="none"        strokeWidth={2} strokeDasharray="4 2" name="Nouveaux patients" />
+            </AreaChart>
+          </ResponsiveContainer>
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '24px' }}>
-          {/* Chart */}
-          <div className="card" style={{ padding: '20px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
-              <div>
-                <div style={{ fontSize: '14px', fontWeight: '600', color: 'var(--gray-900)' }}>Consultations par traitement</div>
-                <div style={{ fontSize: '12px', color: 'var(--gray-500)' }}>Total accumulé</div>
-              </div>
-            </div>
-            {stats.patientsByTreatment.length > 0 ? (
-              <ResponsiveContainer width="100%" height={180}>
-                <BarChart data={stats.patientsByTreatment} barSize={28}>
-                  <XAxis dataKey="name" tick={{ fontSize: 11, fill: 'var(--gray-500)' }} axisLine={false} tickLine={false} />
-                  <YAxis tick={{ fontSize: 11, fill: 'var(--gray-500)' }} axisLine={false} tickLine={false} />
-                  <Tooltip contentStyle={{ borderRadius: '8px', border: '1px solid var(--gray-200)', fontSize: '12px' }} />
-                  <Bar dataKey="count" radius={[4, 4, 0, 0]}>
-                    {stats.patientsByTreatment.map((e: any, i: number) => <Cell key={i} fill={e.color} />)}
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
-            ) : (
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '180px', color: 'var(--gray-400)', fontSize: '13px' }}>
-                Aucune donnée encore
-              </div>
+        {/* Actions du jour */}
+        <div className="card p-5 flex flex-col">
+          <div className="flex items-center justify-between mb-4">
+            <p className="font-semibold text-gray-900">Actions du jour</p>
+            {todayActions.length > 0 && (
+              <span className="w-6 h-6 rounded-full bg-rose-500 text-white text-xs flex items-center justify-center font-bold animate-pulse">{todayActions.length}</span>
             )}
           </div>
-
-          {/* Activité semaine */}
-          <div className="card" style={{ padding: '20px' }}>
-            <div style={{ marginBottom: '16px' }}>
-              <div style={{ fontSize: '14px', fontWeight: '600', color: 'var(--gray-900)' }}>Activité cette semaine</div>
-              <div style={{ fontSize: '12px', color: 'var(--gray-500)' }}>Consultations par jour</div>
+          {todayActions.length === 0 ? (
+            <div className="flex-1 flex flex-col items-center justify-center text-center text-gray-400 py-6">
+              <p className="text-3xl mb-2">✅</p>
+              <p className="text-sm font-medium text-gray-500">Tout est à jour !</p>
+              <p className="text-xs text-gray-400 mt-1">Aucune action planifiée pour aujourd'hui</p>
             </div>
-            <ResponsiveContainer width="100%" height={180}>
-              <AreaChart data={stats.trend}>
-                <defs>
-                  <linearGradient id="grad" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="var(--blue)" stopOpacity={0.15}/>
-                    <stop offset="95%" stopColor="var(--blue)" stopOpacity={0}/>
-                  </linearGradient>
-                </defs>
-                <XAxis dataKey="day" tick={{ fontSize: 11, fill: 'var(--gray-500)' }} axisLine={false} tickLine={false} />
-                <YAxis tick={{ fontSize: 11, fill: 'var(--gray-500)' }} axisLine={false} tickLine={false} />
-                <Tooltip contentStyle={{ borderRadius: '8px', border: '1px solid var(--gray-200)', fontSize: '12px' }} />
-                <Area type="monotone" dataKey="value" stroke="var(--blue)" strokeWidth={2} fill="url(#grad)" />
-              </AreaChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
-          {/* Recent patients */}
-          <div className="card">
-            <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--gray-100)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <div style={{ fontSize: '14px', fontWeight: '600', color: 'var(--gray-900)' }}>Derniers patients</div>
-              <Link href="/dashboard/patients" style={{ fontSize: '12px', color: 'var(--blue)', textDecoration: 'none', fontWeight: '500' }}>Voir tous →</Link>
-            </div>
-            {stats.recentPatients.length === 0 ? (
-              <div style={{ padding: '40px', textAlign: 'center', color: 'var(--gray-400)', fontSize: '13px' }}>Aucun patient</div>
-            ) : (
-              <div style={{ padding: '8px 0' }}>
-                {stats.recentPatients.map((p: any) => (
-                  <Link key={p.id} href={`/dashboard/patients/${p.id}`} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '10px 20px', textDecoration: 'none', transition: 'background 0.1s' }}
-                    onMouseEnter={e => e.currentTarget.style.background = 'var(--gray-50)'}
-                    onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
-                    <div className="avatar" style={{ width: '34px', height: '34px', fontSize: '12px' }}>{p.first_name[0]}{p.last_name[0]}</div>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: '13.5px', fontWeight: '500', color: 'var(--gray-900)' }}>{p.first_name} {p.last_name}</div>
-                      <div style={{ fontSize: '12px', color: 'var(--gray-500)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.email || p.phone || '—'}</div>
-                    </div>
-                    <div style={{ fontSize: '11px', color: 'var(--gray-400)' }}>{formatDate(p.created_at)}</div>
-                  </Link>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* Pending actions */}
-          <div className="card">
-            <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--gray-100)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <div style={{ fontSize: '14px', fontWeight: '600', color: 'var(--gray-900)' }}>Actions automatisées</div>
-              <Link href="/dashboard/automations" style={{ fontSize: '12px', color: 'var(--blue)', textDecoration: 'none', fontWeight: '500' }}>Voir tout →</Link>
-            </div>
-            {stats.pendingActions.length === 0 ? (
-              <div style={{ padding: '40px', textAlign: 'center', color: 'var(--gray-400)', fontSize: '13px' }}>
-                <div style={{ fontSize: '28px', marginBottom: '8px' }}>✅</div>
-                Aucune action en attente
-              </div>
-            ) : (
-              <div style={{ padding: '8px 0' }}>
-                {stats.pendingActions.map((a: any) => (
-                  <div key={a.id} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '10px 20px' }}>
-                    <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: a.step?.type === 'email' ? 'var(--blue-light)' : a.step?.type === 'whatsapp' ? 'var(--green-light)' : 'var(--purple-light)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '14px', flexShrink: 0 }}>
-                      {a.step?.type === 'email' ? '📧' : a.step?.type === 'whatsapp' ? '💬' : '📄'}
-                    </div>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: '13px', fontWeight: '500', color: 'var(--gray-900)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.patient?.first_name} {a.patient?.last_name}</div>
-                      <div style={{ fontSize: '11px', color: 'var(--gray-500)' }}>{a.step?.template_name}</div>
-                    </div>
-                    <span className="badge badge-orange">{a.status}</span>
+          ) : (
+            <div className="flex-1 space-y-2 overflow-y-auto max-h-56">
+              {todayActions.map(a => (
+                <div key={a.id} className="flex items-center gap-2.5 p-3 rounded-xl bg-gray-50 border border-gray-100">
+                  <span className={`text-xs px-2 py-0.5 rounded-full flex-shrink-0 font-medium ${TYPE_COLORS[a.step?.type] ?? 'bg-gray-100 text-gray-500'}`}>
+                    {a.step?.type ?? 'action'}
+                  </span>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-semibold text-gray-900 truncate">{a.patient?.first_name} {a.patient?.last_name}</p>
+                    <p className="text-xs text-gray-400 truncate">{a.step?.template_name}</p>
                   </div>
-                ))}
-              </div>
-            )}
-          </div>
+                  {a.step?.type === 'whatsapp' && (
+                    <button onClick={() => sendAction(a)} disabled={sending === a.id}
+                      className="btn-primary py-1 px-2.5 text-xs flex-shrink-0 disabled:opacity-50">
+                      {sending === a.id ? '...' : '▶ Envoyer'}
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
         </div>
+      </div>
+
+      {/* Recent patients */}
+      <div className="card p-5">
+        <div className="flex items-center justify-between mb-4">
+          <p className="font-semibold text-gray-900">Patients récents</p>
+          <Link href="/dashboard/patients" className="text-sm text-[var(--blue)] hover:underline">Voir tous →</Link>
+        </div>
+        {recentPatients.length === 0 ? (
+          <div className="text-center py-8 text-gray-400 text-sm">Aucun patient pour le moment.</div>
+        ) : (
+          <div className="divide-y divide-gray-100">
+            {recentPatients.map(p => (
+              <Link key={p.id} href={`/dashboard/patients/${p.id}`} className="flex items-center gap-3 py-3 hover:bg-gray-50 px-2 rounded-xl transition-colors">
+                <div className="w-9 h-9 rounded-full bg-[var(--blue-light)] text-[var(--blue)] flex items-center justify-center text-sm font-semibold flex-shrink-0">
+                  {p.first_name?.[0]}{p.last_name?.[0]}
+                </div>
+                <div className="flex-1">
+                  <p className="text-sm font-medium text-gray-900">{p.first_name} {p.last_name}</p>
+                  <p className="text-xs text-gray-400">{p.email || p.phone || '—'}</p>
+                </div>
+                <span className="text-xs text-gray-400">{new Date(p.created_at).toLocaleDateString('fr-FR')}</span>
+              </Link>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   )

@@ -1,247 +1,295 @@
 'use client'
-import { useState, useEffect, useRef, Suspense } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter, useSearchParams } from 'next/navigation'
-import Link from 'next/link'
-import type { ConsultationStructuredData } from '@/lib/types'
 
-const STRUCTURED_FIELDS: Array<{ key: keyof ConsultationStructuredData; label: string; placeholder: string }> = [
-  { key: 'motif_consultation', label: 'Motif de consultation', placeholder: 'Raison principale de la visite...' },
-  { key: 'mode_de_vie', label: 'Mode de vie', placeholder: 'Habitudes, activité physique, tabac...' },
-  { key: 'diagnostic', label: 'Diagnostic', placeholder: 'Évaluation clinique...' },
-  { key: 'zone_donneuse', label: 'Zone donneuse', placeholder: 'Zones identifiées pour prélèvement (si applicable)...' },
-  { key: 'plan_de_traitement', label: 'Plan de traitement', placeholder: 'Protocole recommandé...' },
-  { key: 'antecedents', label: 'Antécédents médicaux', placeholder: 'Maladies, opérations, allergies...' },
-  { key: 'medicaments', label: 'Médicaments', placeholder: 'Traitements en cours...' },
-]
+type RecordingState = 'idle' | 'recording' | 'paused' | 'processing' | 'done'
 
 export default function NewConsultationPage() {
-  return (
-    <Suspense fallback={<div className="flex items-center justify-center h-full"><div className="animate-spin w-8 h-8 border-4 border-violet-600 border-t-transparent rounded-full" /></div>}>
-      <NewConsultationForm />
-    </Suspense>
-  )
-}
-
-function NewConsultationForm() {
+  const supabase = createClient()
   const router = useRouter()
   const searchParams = useSearchParams()
-  const supabase = createClient()
+  const patientIdParam = searchParams.get('patient_id')
+
+  const [profile, setProfile] = useState<any>(null)
+  const [clinic, setClinic] = useState<any>(null)
   const [patients, setPatients] = useState<any[]>([])
   const [treatments, setTreatments] = useState<any[]>([])
-  const [patientId, setPatientId] = useState(searchParams.get('patient_id') ?? '')
+  const [patientId, setPatientId] = useState(patientIdParam ?? '')
   const [treatmentId, setTreatmentId] = useState('')
-  const [structuredData, setStructuredData] = useState<ConsultationStructuredData>({})
-  const [audioFile, setAudioFile] = useState<File | null>(null)
+  const [recordingState, setRecordingState] = useState<RecordingState>('idle')
+  const [audioBlob, setAudioBlob] = useState<Blob | null>(null)
+  const [duration, setDuration] = useState(0)
   const [transcription, setTranscription] = useState('')
-  const [aiLoading, setAiLoading] = useState(false)
-  const [aiStep, setAiStep] = useState<'idle' | 'transcribing' | 'structuring' | 'done'>('idle')
+  const [aiData, setAiData] = useState<any>(null)
+  const [notes, setNotes] = useState('')
   const [saving, setSaving] = useState(false)
-  const [clinicId, setClinicId] = useState('')
-  const fileRef = useRef<HTMLInputElement>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [aiStep, setAiStep] = useState<string | null>(null)
+
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null)
+  const chunksRef = useRef<BlobPart[]>([])
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   useEffect(() => {
     async function load() {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) return
-      const { data: profile } = await supabase.from('profiles').select('clinic_id').eq('id', user.id).single()
-      if (!profile) return
-      setClinicId(profile.clinic_id)
+      const { data: prof } = await supabase.from('profiles').select('*').eq('id', user.id).single()
+      if (!prof) return
+      setProfile(prof)
+      const { data: cl } = await supabase.from('clinics').select('*').eq('id', prof.clinic_id).single()
+      setClinic(cl)
       const [{ data: pts }, { data: trts }] = await Promise.all([
-        supabase.from('patients').select('id, first_name, last_name').eq('clinic_id', profile.clinic_id).order('last_name'),
-        supabase.from('treatments').select('*').eq('clinic_id', profile.clinic_id),
+        supabase.from('patients').select('id,first_name,last_name').eq('clinic_id', prof.clinic_id).order('last_name'),
+        supabase.from('treatments').select('*').eq('clinic_id', prof.clinic_id),
       ])
       setPatients(pts ?? [])
       setTreatments(trts ?? [])
     }
     load()
-  }, [])
+    return () => { if (timerRef.current) clearInterval(timerRef.current) }
+  }, [supabase])
 
-  async function handleAIProcess() {
-    if (!audioFile) return
-    setAiLoading(true)
-    setAiStep('transcribing')
+  async function startRecording() {
+    setError(null)
     try {
-      const formData = new FormData()
-      formData.append('audio', audioFile)
-      const transcribeRes = await fetch('/api/ai/transcribe', { method: 'POST', body: formData })
-      const { transcription: text } = await transcribeRes.json()
-      setTranscription(text)
-      setAiStep('structuring')
-
-      const structureRes = await fetch('/api/ai/structure', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ transcription: text, treatment: treatments.find(t => t.id === treatmentId)?.name }),
-      })
-      const { structured } = await structureRes.json()
-      setStructuredData(structured)
-      setAiStep('done')
-    } catch (err) {
-      console.error(err)
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      const mr = new MediaRecorder(stream, { mimeType: 'audio/webm' })
+      mediaRecorderRef.current = mr
+      chunksRef.current = []
+      mr.ondataavailable = e => { if (e.data.size > 0) chunksRef.current.push(e.data) }
+      mr.onstop = () => {
+        setAudioBlob(new Blob(chunksRef.current, { type: 'audio/webm' }))
+        stream.getTracks().forEach(t => t.stop())
+        setRecordingState('done')
+      }
+      mr.start(200)
+      setRecordingState('recording')
+      setDuration(0)
+      timerRef.current = setInterval(() => setDuration(d => d + 1), 1000)
+    } catch {
+      setError("Microphone non accessible. Autorisez l'accès au microphone dans votre navigateur.")
     }
-    setAiLoading(false)
   }
 
-  async function handleSave() {
-    if (!patientId || !clinicId) return
-    setSaving(true)
+  function stopRecording() {
+    if (timerRef.current) clearInterval(timerRef.current)
+    mediaRecorderRef.current?.stop()
+  }
 
-    // Upload audio if present
-    let audioUrl: string | null = null
-    if (audioFile) {
-      const path = `consultations/${clinicId}/${patientId}/${Date.now()}_${audioFile.name}`
-      const { data: uploadData } = await supabase.storage.from('consultations').upload(path, audioFile)
-      if (uploadData) {
-        const { data: urlData } = supabase.storage.from('consultations').getPublicUrl(uploadData.path)
-        audioUrl = urlData.publicUrl
+  function pauseRecording() {
+    mediaRecorderRef.current?.pause()
+    if (timerRef.current) clearInterval(timerRef.current)
+    setRecordingState('paused')
+  }
+
+  function resumeRecording() {
+    mediaRecorderRef.current?.resume()
+    timerRef.current = setInterval(() => setDuration(d => d + 1), 1000)
+    setRecordingState('recording')
+  }
+
+  function resetRecording() {
+    setAudioBlob(null); setTranscription(''); setAiData(null)
+    setDuration(0); setRecordingState('idle'); setAiStep(null)
+  }
+
+  async function transcribeAudio() {
+    if (!audioBlob) return
+    setRecordingState('processing')
+    setError(null)
+    try {
+      setAiStep('🎙️ Transcription en cours (Whisper)...')
+      const fd = new FormData()
+      fd.append('audio', audioBlob, 'recording.webm')
+      if (clinic?.id) fd.append('clinic_id', clinic.id)
+      const res = await fetch('/api/ai/transcribe', { method: 'POST', body: fd })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error)
+      setTranscription(data.transcription || '')
+
+      if (data.transcription) {
+        setAiStep('✨ Structuration GPT-4 en cours...')
+        const res2 = await fetch('/api/ai/structure', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ transcription: data.transcription, clinic_id: clinic?.id }),
+        })
+        const s = await res2.json()
+        if (res2.ok && s.data) { setAiData(s.data); setNotes(s.data.notes || '') }
       }
+      setAiStep(null)
+    } catch (e: any) {
+      setError(e.message)
+      setAiStep(null)
     }
+    setRecordingState('done')
+  }
 
-    const { data: consultation, error } = await supabase.from('consultations').insert({
-      patient_id: patientId,
-      clinic_id: clinicId,
-      treatment_id: treatmentId || null,
-      transcription: transcription || null,
-      structured_data: structuredData,
-      audio_url: audioUrl,
-      status: Object.keys(structuredData).length > 0 ? 'completed' : 'draft',
-    }).select().single()
-
-    if (!error && consultation) {
-      // Trigger workflow if treatment selected
-      if (treatmentId) {
+  async function save() {
+    if (!patientId || !profile) return
+    setSaving(true); setError(null)
+    try {
+      const { data: consultation, error: err } = await supabase.from('consultations').insert({
+        patient_id: patientId,
+        clinic_id: profile.clinic_id,
+        treatment_id: treatmentId || null,
+        transcription: transcription || null,
+        notes,
+        status: 'completed',
+        consultation_date: new Date().toISOString(),
+        audio_duration_seconds: duration || null,
+        recording_status: audioBlob ? 'done' : 'none',
+        ai_summary: aiData?.summary || null,
+        ai_treatment_plan: aiData?.plan_traitement || null,
+        ai_antecedents: aiData?.antecedents || null,
+        ai_examination: aiData?.examen_clinique || null,
+        structured_data: aiData || null,
+      }).select().single()
+      if (err) throw err
+      if (treatmentId && consultation) {
         await fetch('/api/workflows/trigger', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ consultation_id: consultation.id, treatment_id: treatmentId, patient_id: patientId, clinic_id: clinicId }),
-        })
+          body: JSON.stringify({ consultation_id: consultation.id, treatment_id: treatmentId, patient_id: patientId, clinic_id: profile.clinic_id }),
+        }).catch(() => {})
       }
-      router.push(`/dashboard/consultations/${consultation.id}`)
-    }
-    setSaving(false)
+      router.push(`/dashboard/patients/${patientId}`)
+    } catch (e: any) { setError(e.message); setSaving(false) }
   }
 
-  const updateField = (key: keyof ConsultationStructuredData) => (e: React.ChangeEvent<HTMLTextAreaElement>) =>
-    setStructuredData(d => ({ ...d, [key]: e.target.value }))
+  const fmt = (s: number) => `${Math.floor(s/60)}:${(s%60).toString().padStart(2,'0')}`
 
   return (
-    <div className="p-6 max-w-4xl mx-auto">
-      <Link href="/dashboard/consultations" className="text-sm text-violet-600 hover:underline mb-4 inline-block">← Retour</Link>
-      <h1 className="text-2xl font-bold text-gray-900 mb-6">Nouvelle consultation</h1>
+    <div className="p-6 max-w-3xl mx-auto">
+      <div className="flex items-center gap-3 mb-6">
+        <button onClick={() => router.back()} className="text-gray-400 hover:text-gray-700 text-xl">←</button>
+        <h1 className="text-2xl font-semibold text-gray-900">Nouvelle consultation</h1>
+      </div>
 
-      <div className="space-y-6">
-        {/* Patient & Treatment selection */}
-        <div className="bg-white rounded-xl border border-gray-200 p-5">
-          <h2 className="font-semibold text-gray-900 mb-4">👤 Informations</h2>
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">Patient *</label>
-              <select value={patientId} onChange={e => setPatientId(e.target.value)} required
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-violet-500">
-                <option value="">Sélectionner un patient...</option>
-                {patients.map(p => (
-                  <option key={p.id} value={p.id}>{p.last_name} {p.first_name}</option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">Traitement</label>
-              <select value={treatmentId} onChange={e => setTreatmentId(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-violet-500">
-                <option value="">Sélectionner un traitement...</option>
-                {treatments.map(t => (
-                  <option key={t.id} value={t.id}>{t.name}</option>
-                ))}
-              </select>
-            </div>
+      {error && <div className="mb-5 rounded-xl bg-rose-50 border border-rose-200 px-4 py-3 text-sm text-rose-700">{error}</div>}
+
+      {/* Patient + Treatment */}
+      <div className="card p-6 mb-5">
+        <h2 className="font-semibold text-gray-900 mb-4">Informations</h2>
+        <div className="grid md:grid-cols-2 gap-4">
+          <div>
+            <label className="text-sm font-medium text-gray-700 block mb-1.5">Patient *</label>
+            <select value={patientId} onChange={e => setPatientId(e.target.value)} className="input w-full">
+              <option value="">Sélectionner un patient</option>
+              {patients.map(p => <option key={p.id} value={p.id}>{p.last_name} {p.first_name}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="text-sm font-medium text-gray-700 block mb-1.5">Traitement (déclenchera le workflow)</label>
+            <select value={treatmentId} onChange={e => setTreatmentId(e.target.value)} className="input w-full">
+              <option value="">— Aucun traitement —</option>
+              {treatments.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+            </select>
           </div>
         </div>
+      </div>
 
-        {/* AI Audio transcription */}
-        <div className="bg-white rounded-xl border border-gray-200 p-5">
-          <h2 className="font-semibold text-gray-900 mb-1">🎙️ Transcription IA</h2>
-          <p className="text-xs text-gray-500 mb-4">Uploadez un enregistrement audio pour transcrire et structurer automatiquement la consultation</p>
+      {/* Audio Recorder */}
+      <div className="card p-6 mb-5">
+        <h2 className="font-semibold text-gray-900 mb-1">Enregistrement audio</h2>
+        <p className="text-sm text-gray-500 mb-6">L'IA transcrit et structure automatiquement la fiche médicale.</p>
+        <div className="flex flex-col items-center gap-5">
+          <div className={`w-28 h-28 rounded-full flex flex-col items-center justify-center text-3xl border-4 transition-all ${
+            recordingState === 'recording' ? 'bg-rose-50 border-rose-400 animate-pulse'
+            : recordingState === 'processing' ? 'bg-amber-50 border-amber-400'
+            : recordingState === 'done' && audioBlob ? 'bg-green-50 border-green-400'
+            : 'bg-gray-50 border-gray-200'
+          }`}>
+            {recordingState === 'processing' ? '⏳' : recordingState === 'done' && audioBlob ? '✅' : '🎙️'}
+            {(recordingState === 'recording' || recordingState === 'paused') &&
+              <span className="text-sm font-mono font-semibold mt-1 text-gray-700">{fmt(duration)}</span>}
+          </div>
 
-          <div className="border-2 border-dashed border-gray-200 rounded-xl p-6 text-center hover:border-violet-400 transition-colors cursor-pointer"
-            onClick={() => fileRef.current?.click()}>
-            <input ref={fileRef} type="file" accept="audio/*" className="hidden"
-              onChange={e => { if (e.target.files?.[0]) setAudioFile(e.target.files[0]) }} />
-            {audioFile ? (
-              <div>
-                <p className="text-2xl mb-1">🎵</p>
-                <p className="text-sm font-medium text-gray-700">{audioFile.name}</p>
-                <p className="text-xs text-gray-500">{(audioFile.size / 1024 / 1024).toFixed(1)} MB</p>
-              </div>
-            ) : (
-              <div>
-                <p className="text-3xl mb-2">🎙️</p>
-                <p className="text-sm text-gray-600">Cliquez pour uploader un fichier audio</p>
-                <p className="text-xs text-gray-400 mt-1">MP3, WAV, M4A, OGG...</p>
-              </div>
+          {aiStep && (
+            <div className="flex items-center gap-2 text-sm text-[var(--blue)]">
+              <div className="animate-spin w-4 h-4 border-2 border-[var(--blue)] border-t-transparent rounded-full" />
+              {aiStep}
+            </div>
+          )}
+
+          <div className="flex gap-3 flex-wrap justify-center">
+            {recordingState === 'idle' && (
+              <button onClick={startRecording} className="btn-primary">⏺ Démarrer l'enregistrement</button>
+            )}
+            {recordingState === 'recording' && (
+              <>
+                <button onClick={pauseRecording} className="btn-secondary">⏸ Pause</button>
+                <button onClick={stopRecording} className="btn-primary" style={{ background: '#ef4444' }}>⏹ Terminer</button>
+              </>
+            )}
+            {recordingState === 'paused' && (
+              <>
+                <button onClick={resumeRecording} className="btn-primary">▶ Reprendre</button>
+                <button onClick={stopRecording} className="btn-secondary">⏹ Terminer</button>
+              </>
+            )}
+            {recordingState === 'done' && !transcription && !aiStep && (
+              <>
+                <button onClick={resetRecording} className="btn-secondary">🔄 Recommencer</button>
+                <button onClick={transcribeAudio} className="btn-primary">✨ Transcrire avec l'IA</button>
+              </>
             )}
           </div>
-
-          {audioFile && (
-            <button onClick={handleAIProcess} disabled={aiLoading}
-              className="mt-3 w-full bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-700 hover:to-purple-700 disabled:opacity-60 text-white font-medium py-2.5 rounded-lg text-sm transition-all flex items-center justify-center gap-2">
-              {aiLoading ? (
-                <>
-                  <div className="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full" />
-                  {aiStep === 'transcribing' ? 'Transcription en cours...' : 'Structuration IA...'}
-                </>
-              ) : (
-                <>✨ Lancer l&apos;analyse IA</>
-              )}
-            </button>
-          )}
-
-          {aiStep === 'done' && (
-            <div className="mt-3 bg-green-50 text-green-700 text-xs p-3 rounded-lg border border-green-200">
-              ✅ Transcription et structuration terminées — vérifiez et complétez les champs ci-dessous
-            </div>
-          )}
-
-          {transcription && (
-            <div className="mt-4">
-              <label className="block text-xs font-medium text-gray-700 mb-1">Transcription brute</label>
-              <div className="bg-gray-50 rounded-lg p-3 text-xs text-gray-600 max-h-32 overflow-y-auto scrollbar-thin">
-                {transcription}
-              </div>
-            </div>
+          {duration > 0 && recordingState === 'done' && (
+            <p className="text-xs text-gray-400">Durée enregistrée : {fmt(duration)}</p>
           )}
         </div>
+      </div>
 
-        {/* Structured fields */}
-        <div className="bg-white rounded-xl border border-gray-200 p-5">
-          <h2 className="font-semibold text-gray-900 mb-4">📋 Données structurées</h2>
-          <div className="space-y-4">
-            {STRUCTURED_FIELDS.map(field => (
-              <div key={field.key}>
-                <label className="block text-xs font-medium text-gray-700 mb-1">{field.label}</label>
-                <textarea
-                  value={structuredData[field.key] ?? ''}
-                  onChange={updateField(field.key)}
-                  placeholder={field.placeholder}
-                  rows={2}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-violet-500 resize-none"
-                />
+      {/* Transcription */}
+      {transcription && (
+        <div className="card p-6 mb-5">
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="font-semibold text-gray-900">Transcription</h2>
+            <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded-full">✓ Whisper</span>
+          </div>
+          <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap bg-gray-50 rounded-xl p-4">{transcription}</p>
+        </div>
+      )}
+
+      {/* AI Structured fiche */}
+      {aiData && (
+        <div className="card p-6 mb-5">
+          <div className="flex items-center justify-between mb-5">
+            <h2 className="font-semibold text-gray-900">Fiche médicale structurée</h2>
+            <span className="text-xs bg-violet-100 text-violet-700 px-2 py-1 rounded-full">✨ GPT-4</span>
+          </div>
+          <div className="grid md:grid-cols-2 gap-4">
+            {[
+              { key: 'motif_consultation', label: 'Motif de consultation' },
+              { key: 'antecedents',        label: 'Antécédents' },
+              { key: 'examen_clinique',    label: 'Examen clinique' },
+              { key: 'recommandations',    label: 'Recommandations' },
+              { key: 'plan_traitement',    label: 'Plan de traitement', wide: true },
+              { key: 'summary',            label: 'Résumé',            wide: true },
+            ].filter(f => aiData[f.key]).map(field => (
+              <div key={field.key} className={(field as any).wide ? 'md:col-span-2' : ''}>
+                <p className="text-xs font-semibold uppercase tracking-wide text-gray-400 mb-1.5">{field.label}</p>
+                <div className="bg-gray-50 rounded-xl p-3 text-sm text-gray-700 leading-relaxed">{aiData[field.key]}</div>
               </div>
             ))}
           </div>
         </div>
+      )}
 
-        {/* Actions */}
-        <div className="flex gap-3 pb-6">
-          <Link href="/dashboard/consultations"
-            className="flex-1 text-center px-4 py-2.5 border border-gray-300 text-gray-700 rounded-lg text-sm hover:bg-gray-50 transition-colors">
-            Annuler
-          </Link>
-          <button onClick={handleSave} disabled={saving || !patientId}
-            className="flex-1 bg-violet-600 hover:bg-violet-700 disabled:opacity-60 text-white rounded-lg text-sm font-medium py-2.5 transition-colors">
-            {saving ? 'Enregistrement...' : treatmentId ? '💾 Enregistrer & déclencher workflow' : '💾 Enregistrer'}
-          </button>
-        </div>
+      {/* Notes */}
+      <div className="card p-6 mb-5">
+        <h2 className="font-semibold text-gray-900 mb-3">Notes complémentaires</h2>
+        <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={4} placeholder="Notes libres, observations complémentaires..." className="input w-full resize-none" />
+      </div>
+
+      <div className="flex gap-3 justify-end">
+        <button onClick={() => router.back()} className="btn-secondary">Annuler</button>
+        <button onClick={save} disabled={!patientId || saving} className="btn-primary disabled:opacity-50">
+          {saving ? 'Enregistrement...' : '✓ Sauvegarder la consultation'}
+        </button>
       </div>
     </div>
   )
