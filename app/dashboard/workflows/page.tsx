@@ -1,330 +1,240 @@
 'use client'
 import { useState, useEffect, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { timingLabel, STEP_TYPE_LABELS, STEP_TYPE_COLORS, cn } from '@/lib/utils'
-import type { Workflow, WorkflowStep, Treatment } from '@/lib/types'
+import { timingLabel } from '@/lib/utils'
+
+const TYPE_CFG: Record<string,{icon:string;label:string;color:string;bg:string;border:string}> = {
+  email:    { icon:'📧', label:'Email',    color:'#1D4ED8', bg:'#EFF6FF', border:'#BFDBFE' },
+  whatsapp: { icon:'💬', label:'WhatsApp', color:'#166534', bg:'#F0FDF4', border:'#BBF7D0' },
+  docusign: { icon:'✍️', label:'DocuSign', color:'#6B21A8', bg:'#FAF5FF', border:'#DDD6FE' },
+  document: { icon:'📄', label:'Document', color:'#475569', bg:'#F8FAFC', border:'#E2E8F0' },
+  sms:      { icon:'📱', label:'SMS',      color:'#92400E', bg:'#FFFBEB', border:'#FDE68A' },
+}
 
 export default function WorkflowsPage() {
-  const [workflows, setWorkflows] = useState<any[]>([])
-  const [treatments, setTreatments] = useState<Treatment[]>([])
-  const [selectedWorkflow, setSelectedWorkflow] = useState<any>(null)
-  const [loading, setLoading] = useState(true)
-  const [showNewWorkflow, setShowNewWorkflow] = useState(false)
-  const [showNewStep, setShowNewStep] = useState(false)
-  const [clinicId, setClinicId] = useState('')
   const supabase = createClient()
+  const [workflows, setWorkflows]     = useState<any[]>([])
+  const [treatments, setTreatments]   = useState<any[]>([])
+  const [selected, setSelected]       = useState<any>(null)
+  const [loading, setLoading]         = useState(true)
+  const [clinicId, setClinicId]       = useState('')
+  const [showNew, setShowNew]         = useState(false)
+  const [showStep, setShowStep]       = useState(false)
 
   const load = useCallback(async () => {
-    const { data: { user } } = await supabase.auth.getUser()
+    const { data:{user} } = await supabase.auth.getUser()
     if (!user) return
-    const { data: profile } = await supabase.from('profiles').select('clinic_id').eq('id', user.id).single()
-    if (!profile) return
-    setClinicId(profile.clinic_id)
-    const [{ data: wfs }, { data: trts }] = await Promise.all([
-      supabase.from('workflows').select('*, treatment:treatments(name, color), steps:workflow_steps(*)').eq('clinic_id', profile.clinic_id).order('created_at'),
-      supabase.from('treatments').select('*').eq('clinic_id', profile.clinic_id),
+    const { data:prof } = await supabase.from('profiles').select('clinic_id').eq('id', user.id).single()
+    if (!prof) return
+    setClinicId(prof.clinic_id)
+    const [{ data:wfs }, { data:trts }] = await Promise.all([
+      supabase.from('workflows').select('*, treatment:treatments(name,color), steps:workflow_steps(*)').eq('clinic_id', prof.clinic_id).order('created_at'),
+      supabase.from('treatments').select('*').eq('clinic_id', prof.clinic_id),
     ])
-    const sorted = (wfs ?? []).map((w: any) => ({
-      ...w,
-      steps: (w.steps ?? []).sort((a: WorkflowStep, b: WorkflowStep) => a.step_order - b.step_order)
-    }))
+    const sorted = (wfs ?? []).map((w:any) => ({ ...w, steps:(w.steps??[]).sort((a:any,b:any)=>a.step_order-b.step_order) }))
     setWorkflows(sorted)
     setTreatments(trts ?? [])
-    if (sorted.length > 0 && !selectedWorkflow) setSelectedWorkflow(sorted[0])
+    if (sorted.length && !selected) setSelected(sorted[0])
     setLoading(false)
   }, [])
 
   useEffect(() => { load() }, [load])
 
-  async function deleteStep(stepId: string) {
-    await supabase.from('workflow_steps').delete().eq('id', stepId)
-    load().then(() => {
-      setSelectedWorkflow((prev: any) => workflows.find(w => w.id === prev?.id))
-    })
+  async function deleteStep(sid:string) {
+    await supabase.from('workflow_steps').delete().eq('id', sid)
+    await load()
+    setSelected((prev:any) => workflows.find(w => w.id === prev?.id) ?? prev)
   }
 
-  if (loading) return <div className="flex items-center justify-center h-full"><div className="animate-spin w-8 h-8 border-4 border-violet-600 border-t-transparent rounded-full" /></div>
+  if (loading) return <div style={{ display:'flex', alignItems:'center', justifyContent:'center', height:'100%' }}><div style={{ width:28, height:28, border:'3px solid var(--gray-200)', borderTopColor:'var(--blue)', borderRadius:'50%', animation:'spin .7s linear infinite' }} /><style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style></div>
 
   return (
-    <div className="flex h-full">
-      {/* Left: workflows list */}
-      <div className="w-72 border-r border-gray-200 flex flex-col bg-white flex-shrink-0">
-        <div className="p-4 border-b border-gray-200 flex items-center justify-between">
-          <h2 className="font-semibold text-gray-900">Workflows</h2>
-          <button onClick={() => setShowNewWorkflow(true)}
-            className="text-violet-600 hover:text-violet-800 text-xl font-bold">+</button>
+    <div style={{ display:'flex', height:'100%', overflow:'hidden' }}>
+      {/* ── Left panel ── */}
+      <aside style={{ width:260, borderRight:'1px solid var(--gray-200)', background:'white', display:'flex', flexDirection:'column', flexShrink:0, overflow:'hidden' }}>
+        <div style={{ padding:'16px', borderBottom:'1px solid var(--gray-100)', display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+          <span style={{ fontSize:14, fontWeight:600, color:'var(--gray-900)' }}>Workflows</span>
+          <button onClick={() => setShowNew(true)} style={{ width:28, height:28, borderRadius:8, background:'var(--blue)', border:'none', cursor:'pointer', color:'white', fontSize:18, display:'flex', alignItems:'center', justifyContent:'center', lineHeight:1 }}>+</button>
         </div>
-        <div className="flex-1 overflow-y-auto p-2 space-y-1">
+        <div style={{ flex:1, overflowY:'auto', padding:'8px' }}>
           {workflows.length === 0 ? (
-            <div className="text-center py-8 text-gray-400 text-sm px-4">
-              Aucun workflow. Créez-en un pour démarrer.
-            </div>
+            <div style={{ padding:'24px 12px', textAlign:'center', color:'var(--gray-400)', fontSize:13 }}>Aucun workflow.<br />Créez-en un ↑</div>
           ) : workflows.map(w => (
-            <button key={w.id} onClick={() => setSelectedWorkflow(w)}
-              className={cn(
-                'w-full text-left px-3 py-3 rounded-lg transition-colors',
-                selectedWorkflow?.id === w.id ? 'bg-violet-50 border border-violet-200' : 'hover:bg-gray-50 border border-transparent'
-              )}>
-              <div className="flex items-center gap-2">
-                <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: w.treatment?.color ?? '#8b5cf6' }} />
-                <div className="min-w-0">
-                  <p className="text-sm font-medium text-gray-900 truncate">{w.name}</p>
-                  <p className="text-xs text-gray-500 truncate">{w.treatment?.name}</p>
+            <button key={w.id} onClick={() => setSelected(w)}
+              style={{ width:'100%', textAlign:'left', padding:'10px 12px', borderRadius:8, border: selected?.id===w.id ? '1px solid var(--blue-mid)' : '1px solid transparent', background: selected?.id===w.id ? 'var(--blue-light)' : 'transparent', cursor:'pointer', marginBottom:2, transition:'all .1s' }}>
+              <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+                <span style={{ width:9, height:9, borderRadius:'50%', background:w.treatment?.color ?? 'var(--blue)', flexShrink:0 }} />
+                <div style={{ minWidth:0 }}>
+                  <div style={{ fontSize:13, fontWeight:500, color:'var(--gray-900)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{w.name}</div>
+                  <div style={{ fontSize:11, color:'var(--gray-500)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{w.treatment?.name}</div>
                 </div>
               </div>
-              <div className="flex items-center gap-2 mt-1.5">
-                <span className="text-xs text-gray-400">{w.steps?.length ?? 0} étape{w.steps?.length !== 1 ? 's' : ''}</span>
-                <span className={`text-xs px-1.5 py-0.5 rounded-full ${w.is_active ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
-                  {w.is_active ? 'Actif' : 'Inactif'}
-                </span>
+              <div style={{ display:'flex', gap:8, marginTop:6 }}>
+                <span style={{ fontSize:11, color:'var(--gray-500)' }}>{w.steps?.length ?? 0} étape{w.steps?.length!==1?'s':''}</span>
+                <span style={{ fontSize:11, background: w.is_active?'#DCFCE7':'var(--gray-100)', color: w.is_active?'#166534':'var(--gray-500)', borderRadius:99, padding:'0 6px' }}>{w.is_active?'Actif':'Inactif'}</span>
               </div>
             </button>
           ))}
         </div>
-      </div>
+      </aside>
 
-      {/* Right: workflow detail / builder */}
-      <div className="flex-1 overflow-y-auto p-6">
-        {!selectedWorkflow ? (
-          <div className="flex items-center justify-center h-full text-gray-400">
-            <div className="text-center">
-              <p className="text-5xl mb-4">⚙️</p>
-              <p className="text-lg font-medium">Sélectionnez un workflow</p>
-              <p className="text-sm mt-1">ou créez-en un nouveau</p>
-              <button onClick={() => setShowNewWorkflow(true)}
-                className="mt-4 bg-violet-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-violet-700 transition-colors">
-                + Créer un workflow
-              </button>
+      {/* ── Right panel ── */}
+      <div style={{ flex:1, overflow:'auto' }}>
+        {!selected ? (
+          <div style={{ display:'flex', alignItems:'center', justifyContent:'center', height:'100%' }}>
+            <div style={{ textAlign:'center', color:'var(--gray-400)' }}>
+              <div style={{ fontSize:48, marginBottom:12 }}>⬡</div>
+              <div style={{ fontSize:15, fontWeight:500 }}>Sélectionnez un workflow</div>
+              <button onClick={() => setShowNew(true)} className="btn-primary" style={{ marginTop:16 }}>+ Créer un workflow</button>
             </div>
           </div>
         ) : (
           <div>
-            <div className="flex items-center justify-between mb-6">
+            <div className="page-header" style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
               <div>
-                <h1 className="text-xl font-bold text-gray-900">{selectedWorkflow.name}</h1>
-                <p className="text-sm text-gray-500 mt-0.5">Traitement : {selectedWorkflow.treatment?.name}</p>
+                <div className="page-title">{selected.name}</div>
+                <div className="page-subtitle">Traitement : {selected.treatment?.name}</div>
               </div>
-              <button onClick={() => setShowNewStep(true)}
-                className="bg-violet-600 hover:bg-violet-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors">
-                + Ajouter une étape
-              </button>
+              <button onClick={() => setShowStep(true)} className="btn-primary">+ Ajouter une étape</button>
             </div>
 
-            {/* Steps */}
-            {selectedWorkflow.steps?.length === 0 ? (
-              <div className="text-center py-16 text-gray-400 border-2 border-dashed border-gray-200 rounded-xl">
-                <p className="text-4xl mb-3">📭</p>
-                <p className="font-medium">Aucune étape</p>
-                <p className="text-sm mt-1">Ajoutez des étapes pour automatiser le parcours patient</p>
-                <button onClick={() => setShowNewStep(true)}
-                  className="mt-4 bg-violet-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-violet-700 transition-colors">
-                  + Ajouter la première étape
-                </button>
-              </div>
-            ) : (
-              <div className="relative">
-                <div className="absolute left-6 top-8 bottom-8 w-0.5 bg-gray-200" />
-                <div className="space-y-4">
-                  {selectedWorkflow.steps.map((step: WorkflowStep, i: number) => (
-                    <div key={step.id} className="relative flex gap-4">
-                      <div className={`w-12 h-12 rounded-full flex items-center justify-center text-sm font-bold z-10 flex-shrink-0 ${
-                        step.type === 'email' ? 'bg-blue-100 text-blue-700' :
-                        step.type === 'whatsapp' ? 'bg-green-100 text-green-700' :
-                        step.type === 'docusign' ? 'bg-purple-100 text-purple-700' :
-                        'bg-gray-100 text-gray-600'
-                      }`}>
-                        {step.type === 'email' ? '📧' : step.type === 'whatsapp' ? '💬' : step.type === 'docusign' ? '✍️' : '📄'}
-                      </div>
-                      <div className="flex-1 bg-white border border-gray-200 rounded-xl p-4 hover:border-gray-300 transition-colors">
-                        <div className="flex items-start justify-between">
-                          <div className="flex-1">
-                            <div className="flex items-center gap-2 flex-wrap">
-                              <span className={`text-xs px-2 py-0.5 rounded-full ${STEP_TYPE_COLORS[step.type]}`}>
-                                {STEP_TYPE_LABELS[step.type]}
-                              </span>
-                              <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">
-                                {timingLabel(step.timing_days, step.timing_reference)}
-                              </span>
-                              {!step.is_active && <span className="text-xs bg-red-100 text-red-600 px-2 py-0.5 rounded-full">Inactif</span>}
+            <div className="page-content">
+              {(!selected.steps || selected.steps.length === 0) ? (
+                <div className="card" style={{ padding:'52px', textAlign:'center' }}>
+                  <div style={{ fontSize:38, marginBottom:12 }}>📭</div>
+                  <div style={{ fontSize:14, fontWeight:500, color:'var(--gray-700)', marginBottom:6 }}>Aucune étape</div>
+                  <div style={{ fontSize:13, color:'var(--gray-400)', marginBottom:20 }}>Ajoutez des étapes pour automatiser le parcours patient</div>
+                  <button onClick={() => setShowStep(true)} className="btn-primary">+ Première étape</button>
+                </div>
+              ) : (
+                <div style={{ position:'relative', paddingLeft:24 }}>
+                  <div style={{ position:'absolute', left:15, top:16, bottom:16, width:2, background:'var(--gray-100)', borderRadius:1 }} />
+                  {selected.steps.map((step:any, i:number) => {
+                    const tc = TYPE_CFG[step.type] ?? TYPE_CFG.document
+                    return (
+                      <div key={step.id} style={{ display:'flex', gap:16, marginBottom:14 }}>
+                        {/* Icon bubble */}
+                        <div style={{ width:32, height:32, borderRadius:'50%', background:tc.bg, border:`1.5px solid ${tc.border}`, display:'flex', alignItems:'center', justifyContent:'center', fontSize:14, flexShrink:0, zIndex:1 }}>
+                          {tc.icon}
+                        </div>
+
+                        {/* Card */}
+                        <div className="card" style={{ flex:1, padding:'14px 16px' }}>
+                          <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', gap:8 }}>
+                            <div style={{ flex:1, minWidth:0 }}>
+                              <div style={{ display:'flex', alignItems:'center', gap:8, flexWrap:'wrap', marginBottom:4 }}>
+                                <span style={{ fontSize:11, fontWeight:600, color:tc.color, background:tc.bg, border:`1px solid ${tc.border}`, borderRadius:99, padding:'1px 8px' }}>{tc.label}</span>
+                                <span style={{ fontSize:11, background:'var(--gray-100)', color:'var(--gray-600)', borderRadius:99, padding:'1px 8px' }}>
+                                  {timingLabel(step.timing_days, step.timing_reference)}
+                                </span>
+                                {!step.is_active && <span style={{ fontSize:11, background:'#FEF2F2', color:'#B91C1C', borderRadius:99, padding:'1px 8px' }}>Inactif</span>}
+                              </div>
+                              <div style={{ fontSize:14, fontWeight:600, color:'var(--gray-900)' }}>{step.template_name ?? 'Sans nom'}</div>
+                              {step.template_subject && <div style={{ fontSize:12, color:'var(--gray-500)', marginTop:2 }}>Sujet : {step.template_subject}</div>}
+                              {step.template_body && <div style={{ fontSize:12, color:'var(--gray-400)', marginTop:5, background:'var(--gray-50)', borderRadius:6, padding:'6px 9px', borderLeft:`2px solid ${tc.border}`, lineHeight:1.55 }}>{step.template_body}</div>}
                             </div>
-                            <p className="font-medium text-gray-900 mt-2">{step.template_name ?? 'Sans nom'}</p>
-                            {step.template_subject && <p className="text-xs text-gray-500 mt-0.5">Sujet : {step.template_subject}</p>}
-                            {step.template_body && (
-                              <p className="text-xs text-gray-400 mt-1 line-clamp-2">{step.template_body}</p>
-                            )}
+                            <button onClick={() => deleteStep(step.id)} style={{ background:'none', border:'none', cursor:'pointer', color:'var(--gray-300)', fontSize:14, padding:'2px', flexShrink:0 }}
+                              onMouseEnter={e => e.currentTarget.style.color='#DC2626'}
+                              onMouseLeave={e => e.currentTarget.style.color='var(--gray-300)'}>🗑️</button>
                           </div>
-                          <button onClick={() => deleteStep(step.id)}
-                            className="text-gray-300 hover:text-red-500 transition-colors ml-2 flex-shrink-0">🗑️</button>
                         </div>
                       </div>
-                    </div>
-                  ))}
+                    )
+                  })}
                 </div>
-              </div>
-            )}
+              )}
+            </div>
           </div>
         )}
       </div>
 
-      {/* New Workflow Modal */}
-      {showNewWorkflow && (
-        <NewWorkflowModal
-          treatments={treatments}
-          clinicId={clinicId}
-          onClose={() => setShowNewWorkflow(false)}
-          onCreated={() => { setShowNewWorkflow(false); load() }}
-        />
-      )}
-
-      {/* New Step Modal */}
-      {showNewStep && selectedWorkflow && (
-        <NewStepModal
-          workflowId={selectedWorkflow.id}
-          stepCount={selectedWorkflow.steps?.length ?? 0}
-          onClose={() => setShowNewStep(false)}
-          onCreated={() => { setShowNewStep(false); load() }}
-        />
-      )}
+      {showNew && <NewWorkflowModal treatments={treatments} clinicId={clinicId} onClose={() => setShowNew(false)} onCreated={() => { setShowNew(false); load() }} />}
+      {showStep && selected && <NewStepModal workflowId={selected.id} stepCount={selected.steps?.length ?? 0} onClose={() => setShowStep(false)} onCreated={() => { setShowStep(false); load() }} />}
     </div>
   )
 }
 
-function NewWorkflowModal({ treatments, clinicId, onClose, onCreated }: {
-  treatments: Treatment[], clinicId: string, onClose: () => void, onCreated: () => void
-}) {
+function NewWorkflowModal({ treatments, clinicId, onClose, onCreated }:any) {
   const supabase = createClient()
-  const [form, setForm] = useState({ name: '', treatment_id: '' })
-  const [loading, setLoading] = useState(false)
-
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault()
-    setLoading(true)
-    await supabase.from('workflows').insert({ ...form, clinic_id: clinicId })
-    setLoading(false)
-    onCreated()
+  const [form, setForm] = useState({ name:'', treatment_id:'' })
+  const [saving, setSaving] = useState(false)
+  async function submit(e:React.FormEvent) {
+    e.preventDefault(); setSaving(true)
+    await supabase.from('workflows').insert({ ...form, clinic_id:clinicId })
+    setSaving(false); onCreated()
   }
-
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md">
-        <div className="flex items-center justify-between p-5 border-b">
-          <h2 className="font-bold text-gray-900">Nouveau workflow</h2>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl">×</button>
-        </div>
-        <form onSubmit={handleSubmit} className="p-5 space-y-4">
-          <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">Nom du workflow *</label>
-            <input type="text" value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} required
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-violet-500"
-              placeholder="Parcours greffe complet..." />
+    <div className="modal-overlay">
+      <div className="modal">
+        <div className="modal-header"><div className="modal-title">Nouveau workflow</div><button onClick={onClose} style={{ background:'none', border:'none', cursor:'pointer', fontSize:20, color:'var(--gray-400)' }}>×</button></div>
+        <form onSubmit={submit}>
+          <div className="modal-body" style={{ display:'flex', flexDirection:'column', gap:14 }}>
+            <div><label className="label">Nom *</label><input className="input" value={form.name} onChange={e => setForm(f=>({...f,name:e.target.value}))} required placeholder="Parcours greffe complet…" /></div>
+            <div><label className="label">Traitement *</label>
+              <select className="input" value={form.treatment_id} onChange={e => setForm(f=>({...f,treatment_id:e.target.value}))} required>
+                <option value="">Choisir…</option>
+                {treatments.map((t:any) => <option key={t.id} value={t.id}>{t.name}</option>)}
+              </select>
+            </div>
           </div>
-          <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">Traitement associé *</label>
-            <select value={form.treatment_id} onChange={e => setForm(f => ({ ...f, treatment_id: e.target.value }))} required
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-violet-500">
-              <option value="">Choisir un traitement...</option>
-              {treatments.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-            </select>
-          </div>
-          <div className="flex gap-3 pt-2">
-            <button type="button" onClick={onClose} className="flex-1 border border-gray-300 text-gray-700 py-2 rounded-lg text-sm hover:bg-gray-50">Annuler</button>
-            <button type="submit" disabled={loading} className="flex-1 bg-violet-600 text-white py-2 rounded-lg text-sm font-medium hover:bg-violet-700 disabled:opacity-60">
-              {loading ? 'Création...' : 'Créer'}
-            </button>
-          </div>
+          <div className="modal-footer"><button type="button" onClick={onClose} className="btn-secondary">Annuler</button><button type="submit" disabled={saving} className="btn-primary">{saving?'…':'Créer'}</button></div>
         </form>
       </div>
     </div>
   )
 }
 
-function NewStepModal({ workflowId, stepCount, onClose, onCreated }: {
-  workflowId: string, stepCount: number, onClose: () => void, onCreated: () => void
-}) {
+function NewStepModal({ workflowId, stepCount, onClose, onCreated }:any) {
   const supabase = createClient()
-  const [form, setForm] = useState({
-    type: 'email',
-    timing_days: 0,
-    timing_reference: 'consultation',
-    template_name: '',
-    template_subject: '',
-    template_body: '',
-  })
-  const [loading, setLoading] = useState(false)
-  const update = (k: string) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) =>
-    setForm(f => ({ ...f, [k]: k === 'timing_days' ? parseInt(e.target.value) || 0 : e.target.value }))
+  const [form, setForm] = useState({ type:'email', timing_days:0, timing_reference:'consultation', template_name:'', template_subject:'', template_body:'' })
+  const [saving, setSaving] = useState(false)
+  const up = (k:string) => (e:React.ChangeEvent<HTMLInputElement|HTMLSelectElement|HTMLTextAreaElement>) => setForm(f=>({...f,[k]:k==='timing_days'?parseInt(e.target.value)||0:e.target.value}))
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault()
-    setLoading(true)
-    await supabase.from('workflow_steps').insert({ ...form, workflow_id: workflowId, step_order: stepCount + 1 })
-    setLoading(false)
-    onCreated()
+  async function submit(e:React.FormEvent) {
+    e.preventDefault(); setSaving(true)
+    await supabase.from('workflow_steps').insert({ ...form, workflow_id:workflowId, step_order:stepCount+1 })
+    setSaving(false); onCreated()
   }
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-y-auto max-h-[90vh]">
-        <div className="flex items-center justify-between p-5 border-b">
-          <h2 className="font-bold text-gray-900">Nouvelle étape</h2>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl">×</button>
-        </div>
-        <form onSubmit={handleSubmit} className="p-5 space-y-4">
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">Type d&apos;action *</label>
-              <select value={form.type} onChange={update('type')}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-violet-500">
-                <option value="email">📧 Email</option>
-                <option value="whatsapp">💬 WhatsApp</option>
-                <option value="document">📄 Document</option>
-                <option value="docusign">✍️ DocuSign</option>
-                <option value="sms">📱 SMS</option>
-              </select>
+    <div className="modal-overlay">
+      <div className="modal" style={{ maxWidth:520 }}>
+        <div className="modal-header"><div className="modal-title">Nouvelle étape</div><button onClick={onClose} style={{ background:'none', border:'none', cursor:'pointer', fontSize:20, color:'var(--gray-400)' }}>×</button></div>
+        <form onSubmit={submit}>
+          <div className="modal-body" style={{ display:'flex', flexDirection:'column', gap:14, maxHeight:'65vh', overflowY:'auto' }}>
+            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
+              <div><label className="label">Type *</label>
+                <select className="input" value={form.type} onChange={up('type')}>
+                  <option value="email">📧 Email</option>
+                  <option value="whatsapp">💬 WhatsApp</option>
+                  <option value="document">📄 Document</option>
+                  <option value="docusign">✍️ DocuSign</option>
+                  <option value="sms">📱 SMS</option>
+                </select>
+              </div>
+              <div><label className="label">Référence</label>
+                <select className="input" value={form.timing_reference} onChange={up('timing_reference')}>
+                  <option value="consultation">Consultation</option>
+                  <option value="intervention">Intervention</option>
+                </select>
+              </div>
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">Référence timing</label>
-              <select value={form.timing_reference} onChange={update('timing_reference')}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-violet-500">
-                <option value="consultation">Consultation</option>
-                <option value="intervention">Intervention</option>
-              </select>
+              <label className="label">Timing (jours — négatif = avant)</label>
+              <input className="input" type="number" value={form.timing_days} onChange={up('timing_days')} />
+              <div style={{ fontSize:11, color:'var(--gray-400)', marginTop:4 }}>
+                {form.timing_days===0 ? 'Le jour même' : form.timing_days>0 ? `J+${form.timing_days}` : `J${form.timing_days}`} après {form.timing_reference==='consultation'?'la consultation':"l'intervention"}
+              </div>
             </div>
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">Timing (jours) — négatif = avant</label>
-            <input type="number" value={form.timing_days} onChange={update('timing_days')}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-violet-500" />
-            <p className="text-xs text-gray-400 mt-0.5">
-              {form.timing_days === 0 ? 'Le jour même' : form.timing_days > 0 ? `J+${form.timing_days}` : `J${form.timing_days}`} après {form.timing_reference === 'consultation' ? 'la consultation' : "l'intervention"}
-            </p>
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">Nom du template *</label>
-            <input type="text" value={form.template_name} onChange={update('template_name')} required
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-violet-500"
-              placeholder="rappel_consultation, instructions_post_op..." />
-          </div>
-          {form.type === 'email' && (
+            <div><label className="label">Nom du template *</label><input className="input" value={form.template_name} onChange={up('template_name')} required placeholder="rappel_pre_op, j1_post_op…" /></div>
+            {form.type==='email' && <div><label className="label">Sujet email</label><input className="input" value={form.template_subject} onChange={up('template_subject')} /></div>}
             <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">Sujet email</label>
-              <input type="text" value={form.template_subject} onChange={update('template_subject')}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-violet-500" />
+              <label className="label">Corps du message</label>
+              <textarea className="input" value={form.template_body} onChange={up('template_body')} rows={4} style={{ resize:'vertical' }} placeholder={`Bonjour {{patient_name}},\n\n…`} />
+              <div style={{ fontSize:11, color:'var(--gray-400)', marginTop:4 }}>Variables : <code style={{ background:'var(--gray-100)', padding:'1px 4px', borderRadius:3 }}>{'{{patient_name}}'}</code> <code style={{ background:'var(--gray-100)', padding:'1px 4px', borderRadius:3 }}>{'{{clinic_name}}'}</code></div>
             </div>
-          )}
-          <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">Corps du message</label>
-            <textarea value={form.template_body} onChange={update('template_body')} rows={3}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-violet-500 resize-none"
-              placeholder="Utilisez {{patient_name}} pour le nom du patient..." />
-            <p className="text-xs text-gray-400 mt-0.5">Variables : {`{{patient_name}}`}, {`{{clinic_name}}`}, {`{{appointment_date}}`}</p>
           </div>
-          <div className="flex gap-3 pt-2">
-            <button type="button" onClick={onClose} className="flex-1 border border-gray-300 text-gray-700 py-2 rounded-lg text-sm hover:bg-gray-50">Annuler</button>
-            <button type="submit" disabled={loading} className="flex-1 bg-violet-600 text-white py-2 rounded-lg text-sm font-medium hover:bg-violet-700 disabled:opacity-60">
-              {loading ? 'Ajout...' : 'Ajouter l\'étape'}
-            </button>
-          </div>
+          <div className="modal-footer"><button type="button" onClick={onClose} className="btn-secondary">Annuler</button><button type="submit" disabled={saving} className="btn-primary">{saving?'…':"Ajouter l'étape"}</button></div>
         </form>
       </div>
     </div>
