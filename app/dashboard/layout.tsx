@@ -12,6 +12,7 @@ const NAV = [
   { href: '/dashboard/appointments',     label: 'Agenda',          icon: '◫' },
   { href: '/dashboard/workflows',        label: 'Workflows',       icon: '⬡' },
   { href: '/dashboard/automations',      label: 'Automatisations', icon: '⚡' },
+  { href: '/dashboard/analytics',        label: 'Analytiques',     icon: '📊' },
   { href: '/dashboard/import',           label: 'Import Doctolib', icon: '📥' },
   { href: '/dashboard/settings',         label: 'Paramètres',      icon: '⚙️' },
 ]
