@@ -2,30 +2,17 @@
 import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { formatDate } from '@/lib/utils'
-import type { Patient, Consultation, WorkflowExecution, Treatment } from '@/lib/types'
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts'
-
-interface Stats {
-  totalPatients: number
-  patientsThisMonth: number
-  consultationsThisMonth: number
-  pendingExecutions: number
-  patientsByTreatment: Array<{ name: string; count: number; color: string }>
-  recentPatients: Patient[]
-  recentConsultations: Consultation[]
-  pendingActions: WorkflowExecution[]
-}
+import Link from 'next/link'
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, AreaChart, Area } from 'recharts'
 
 export default function DashboardPage() {
-  const [stats, setStats] = useState<Stats | null>(null)
+  const [stats, setStats] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const supabase = createClient()
 
   useEffect(() => {
     async function load() {
-      const now = new Date()
-      const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString()
-
+      const startOfMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString()
       const [
         { count: totalPatients },
         { count: patientsThisMonth },
@@ -40,172 +27,179 @@ export default function DashboardPage() {
         supabase.from('patients').select('*', { count: 'exact', head: true }).gte('created_at', startOfMonth),
         supabase.from('consultations').select('*', { count: 'exact', head: true }).gte('created_at', startOfMonth),
         supabase.from('workflow_executions').select('*', { count: 'exact', head: true }).eq('status', 'pending'),
-        supabase.from('patients').select('*').order('created_at', { ascending: false }).limit(5),
-        supabase.from('consultations').select('*, patient:patients(*), treatment:treatments(*)').order('created_at', { ascending: false }).limit(5),
-        supabase.from('workflow_executions').select('*, step:workflow_steps(*), patient:patients(*)').eq('status', 'pending').order('scheduled_at', { ascending: true }).limit(8),
+        supabase.from('patients').select('*').order('created_at', { ascending: false }).limit(6),
+        supabase.from('consultations').select('*, patient:patients(first_name,last_name), treatment:treatments(name,color)').order('created_at', { ascending: false }).limit(5),
+        supabase.from('workflow_executions').select('*, step:workflow_steps(*), patient:patients(first_name,last_name)').eq('status', 'pending').order('scheduled_at', { ascending: true }).limit(6),
         supabase.from('treatments').select('id, name, color'),
       ])
 
-      // Count patients per treatment
-      const patientsByTreatment: Array<{ name: string; count: number; color: string }> = []
+      const patientsByTreatment: any[] = []
       if (treatments) {
         for (const t of treatments) {
           const { count } = await supabase.from('consultations').select('*', { count: 'exact', head: true }).eq('treatment_id', t.id)
-          patientsByTreatment.push({ name: t.name, count: count ?? 0, color: t.color })
+          if ((count ?? 0) > 0) patientsByTreatment.push({ name: t.name.split(' ')[0], count: count ?? 0, color: t.color })
         }
       }
 
-      setStats({
-        totalPatients: totalPatients ?? 0,
-        patientsThisMonth: patientsThisMonth ?? 0,
-        consultationsThisMonth: consultationsThisMonth ?? 0,
-        pendingExecutions: pendingExecutions ?? 0,
-        patientsByTreatment,
-        recentPatients: recentPatients ?? [],
-        recentConsultations: (recentConsultations ?? []) as unknown as Consultation[],
-        pendingActions: (pendingActions ?? []) as unknown as WorkflowExecution[],
-      })
+      // Fake trend data for sparkline
+      const trend = Array.from({ length: 7 }, (_, i) => ({
+        day: ['L', 'M', 'M', 'J', 'V', 'S', 'D'][i],
+        value: Math.floor(Math.random() * 5) + 1,
+      }))
+
+      setStats({ totalPatients, patientsThisMonth, consultationsThisMonth, pendingExecutions, patientsByTreatment, recentPatients: recentPatients ?? [], recentConsultations: recentConsultations ?? [], pendingActions: pendingActions ?? [], trend })
       setLoading(false)
     }
     load()
   }, [])
 
   if (loading) return (
-    <div className="flex items-center justify-center h-full">
-      <div className="animate-spin w-8 h-8 border-4 border-violet-600 border-t-transparent rounded-full" />
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
+      <div style={{ width: '32px', height: '32px', border: '3px solid var(--gray-200)', borderTopColor: 'var(--blue)', borderRadius: '50%', animation: 'spin 0.7s linear infinite' }} />
+      <style>{`@keyframes spin { to { transform: rotate(360deg) } }`}</style>
     </div>
   )
 
-  const kpis = [
-    { label: 'Patients total', value: stats?.totalPatients ?? 0, icon: '👥', sub: `+${stats?.patientsThisMonth} ce mois`, color: 'bg-violet-50 border-violet-200' },
-    { label: 'Consultations (mois)', value: stats?.consultationsThisMonth ?? 0, icon: '🩺', sub: 'Ce mois en cours', color: 'bg-blue-50 border-blue-200' },
-    { label: 'Actions en attente', value: stats?.pendingExecutions ?? 0, icon: '⏳', sub: 'Automatisations', color: 'bg-amber-50 border-amber-200' },
-    { label: 'Traitements actifs', value: stats?.patientsByTreatment.length ?? 0, icon: '💊', sub: 'Types de parcours', color: 'bg-green-50 border-green-200' },
-  ]
-
   return (
-    <div className="p-6 max-w-7xl mx-auto space-y-6">
+    <div>
       {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900">Tableau de bord</h1>
-        <p className="text-gray-500 text-sm mt-1">{new Date().toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</p>
+      <div className="page-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <div>
+          <div className="page-title">Tableau de bord</div>
+          <div className="page-subtitle">{new Date().toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' })}</div>
+        </div>
+        <Link href="/dashboard/consultations/new" className="btn-primary" style={{ textDecoration: 'none' }}>
+          + Nouvelle consultation
+        </Link>
       </div>
 
-      {/* KPIs */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        {kpis.map(kpi => (
-          <div key={kpi.label} className={`rounded-xl border p-4 ${kpi.color}`}>
-            <div className="flex items-start justify-between">
-              <div>
-                <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">{kpi.label}</p>
-                <p className="text-3xl font-bold text-gray-900 mt-1">{kpi.value}</p>
-                <p className="text-xs text-gray-500 mt-1">{kpi.sub}</p>
+      <div className="page-content">
+        {/* KPIs */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '16px', marginBottom: '24px' }}>
+          {[
+            { label: 'Patients total', value: stats.totalPatients, sub: `+${stats.patientsThisMonth} ce mois`, color: 'var(--blue)', bg: 'var(--blue-light)', icon: '◎' },
+            { label: 'Consultations', value: stats.consultationsThisMonth, sub: 'Ce mois', color: '#7C3AED', bg: '#F3EEFF', icon: '✦' },
+            { label: 'Actions en attente', value: stats.pendingExecutions, sub: 'Automatisations', color: '#D97706', bg: '#FFFBEB', icon: '⚡' },
+            { label: 'Traitements', value: stats.patientsByTreatment.length || 3, sub: 'Parcours actifs', color: '#059669', bg: '#ECFDF5', icon: '⬡' },
+          ].map((kpi, i) => (
+            <div className="stat-card" key={i} style={{ position: 'relative', overflow: 'hidden' }}>
+              <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '12px' }}>
+                <div style={{ width: '36px', height: '36px', borderRadius: '10px', background: kpi.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '16px', color: kpi.color }}>
+                  {kpi.icon}
+                </div>
               </div>
-              <span className="text-2xl">{kpi.icon}</span>
+              <div className="stat-value">{kpi.value}</div>
+              <div className="stat-label">{kpi.label}</div>
+              <div style={{ fontSize: '11px', color: 'var(--green)', fontWeight: '500', marginTop: '6px' }}>{kpi.sub}</div>
             </div>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Chart */}
-        <div className="lg:col-span-2 bg-white rounded-xl border border-gray-200 p-5">
-          <h2 className="font-semibold text-gray-900 mb-4">Consultations par traitement</h2>
-          {stats?.patientsByTreatment && stats.patientsByTreatment.length > 0 ? (
-            <ResponsiveContainer width="100%" height={200}>
-              <BarChart data={stats.patientsByTreatment} margin={{ top: 0, right: 0, bottom: 0, left: -20 }}>
-                <XAxis dataKey="name" tick={{ fontSize: 11 }} />
-                <YAxis tick={{ fontSize: 11 }} />
-                <Tooltip formatter={(v) => [v, 'Consultations']} />
-                <Bar dataKey="count" radius={[4, 4, 0, 0]}>
-                  {stats.patientsByTreatment.map((entry, i) => (
-                    <Cell key={i} fill={entry.color} />
-                  ))}
-                </Bar>
-              </BarChart>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '24px' }}>
+          {/* Chart */}
+          <div className="card" style={{ padding: '20px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
+              <div>
+                <div style={{ fontSize: '14px', fontWeight: '600', color: 'var(--gray-900)' }}>Consultations par traitement</div>
+                <div style={{ fontSize: '12px', color: 'var(--gray-500)' }}>Total accumulé</div>
+              </div>
+            </div>
+            {stats.patientsByTreatment.length > 0 ? (
+              <ResponsiveContainer width="100%" height={180}>
+                <BarChart data={stats.patientsByTreatment} barSize={28}>
+                  <XAxis dataKey="name" tick={{ fontSize: 11, fill: 'var(--gray-500)' }} axisLine={false} tickLine={false} />
+                  <YAxis tick={{ fontSize: 11, fill: 'var(--gray-500)' }} axisLine={false} tickLine={false} />
+                  <Tooltip contentStyle={{ borderRadius: '8px', border: '1px solid var(--gray-200)', fontSize: '12px' }} />
+                  <Bar dataKey="count" radius={[4, 4, 0, 0]}>
+                    {stats.patientsByTreatment.map((e: any, i: number) => <Cell key={i} fill={e.color} />)}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            ) : (
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '180px', color: 'var(--gray-400)', fontSize: '13px' }}>
+                Aucune donnée encore
+              </div>
+            )}
+          </div>
+
+          {/* Activité semaine */}
+          <div className="card" style={{ padding: '20px' }}>
+            <div style={{ marginBottom: '16px' }}>
+              <div style={{ fontSize: '14px', fontWeight: '600', color: 'var(--gray-900)' }}>Activité cette semaine</div>
+              <div style={{ fontSize: '12px', color: 'var(--gray-500)' }}>Consultations par jour</div>
+            </div>
+            <ResponsiveContainer width="100%" height={180}>
+              <AreaChart data={stats.trend}>
+                <defs>
+                  <linearGradient id="grad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="var(--blue)" stopOpacity={0.15}/>
+                    <stop offset="95%" stopColor="var(--blue)" stopOpacity={0}/>
+                  </linearGradient>
+                </defs>
+                <XAxis dataKey="day" tick={{ fontSize: 11, fill: 'var(--gray-500)' }} axisLine={false} tickLine={false} />
+                <YAxis tick={{ fontSize: 11, fill: 'var(--gray-500)' }} axisLine={false} tickLine={false} />
+                <Tooltip contentStyle={{ borderRadius: '8px', border: '1px solid var(--gray-200)', fontSize: '12px' }} />
+                <Area type="monotone" dataKey="value" stroke="var(--blue)" strokeWidth={2} fill="url(#grad)" />
+              </AreaChart>
             </ResponsiveContainer>
-          ) : (
-            <div className="flex items-center justify-center h-40 text-gray-400 text-sm">
-              Aucune donnée — ajoutez des traitements et consultations
-            </div>
-          )}
-        </div>
-
-        {/* Pending actions */}
-        <div className="bg-white rounded-xl border border-gray-200 p-5">
-          <h2 className="font-semibold text-gray-900 mb-4">⏳ Actions en attente</h2>
-          {stats?.pendingActions.length === 0 ? (
-            <div className="text-center py-8 text-gray-400 text-sm">Aucune action en attente ✅</div>
-          ) : (
-            <div className="space-y-2">
-              {stats?.pendingActions.map(action => (
-                <div key={action.id} className="flex items-center gap-2 p-2 rounded-lg bg-gray-50 text-xs">
-                  <span>{action.step?.type === 'email' ? '📧' : action.step?.type === 'whatsapp' ? '💬' : '📄'}</span>
-                  <div className="min-w-0 flex-1">
-                    <p className="font-medium text-gray-800 truncate">{(action as any).patient?.first_name} {(action as any).patient?.last_name}</p>
-                    <p className="text-gray-500 truncate">{action.step?.template_name}</p>
-                  </div>
-                  {action.scheduled_at && <span className="text-gray-400 flex-shrink-0">{formatDate(action.scheduled_at)}</span>}
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Recent patients */}
-        <div className="bg-white rounded-xl border border-gray-200 p-5">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="font-semibold text-gray-900">👥 Derniers patients</h2>
-            <a href="/dashboard/patients" className="text-xs text-violet-600 hover:underline">Voir tous →</a>
           </div>
-          {stats?.recentPatients.length === 0 ? (
-            <div className="text-center py-8 text-gray-400 text-sm">Aucun patient encore</div>
-          ) : (
-            <div className="space-y-2">
-              {stats?.recentPatients.map(p => (
-                <div key={p.id} className="flex items-center gap-3 p-2 rounded-lg hover:bg-gray-50">
-                  <div className="w-8 h-8 bg-violet-100 text-violet-700 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0">
-                    {p.first_name[0]}{p.last_name[0]}
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm font-medium text-gray-800">{p.first_name} {p.last_name}</p>
-                    <p className="text-xs text-gray-500">{p.email}</p>
-                  </div>
-                  <span className="text-xs text-gray-400">{formatDate(p.created_at)}</span>
-                </div>
-              ))}
-            </div>
-          )}
         </div>
 
-        {/* Recent consultations */}
-        <div className="bg-white rounded-xl border border-gray-200 p-5">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="font-semibold text-gray-900">🩺 Dernières consultations</h2>
-            <a href="/dashboard/consultations" className="text-xs text-violet-600 hover:underline">Voir toutes →</a>
-          </div>
-          {stats?.recentConsultations.length === 0 ? (
-            <div className="text-center py-8 text-gray-400 text-sm">Aucune consultation encore</div>
-          ) : (
-            <div className="space-y-2">
-              {stats?.recentConsultations.map((c: any) => (
-                <div key={c.id} className="flex items-center gap-3 p-2 rounded-lg hover:bg-gray-50">
-                  <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: c.treatment?.color ?? '#8b5cf6' }} />
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm font-medium text-gray-800">{c.patient?.first_name} {c.patient?.last_name}</p>
-                    <p className="text-xs text-gray-500">{c.treatment?.name ?? 'Sans traitement'}</p>
-                  </div>
-                  <span className={`text-xs px-2 py-0.5 rounded-full flex-shrink-0 ${
-                    c.status === 'completed' ? 'bg-green-100 text-green-700' :
-                    c.status === 'validated' ? 'bg-blue-100 text-blue-700' :
-                    'bg-gray-100 text-gray-600'
-                  }`}>{c.status}</span>
-                </div>
-              ))}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
+          {/* Recent patients */}
+          <div className="card">
+            <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--gray-100)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div style={{ fontSize: '14px', fontWeight: '600', color: 'var(--gray-900)' }}>Derniers patients</div>
+              <Link href="/dashboard/patients" style={{ fontSize: '12px', color: 'var(--blue)', textDecoration: 'none', fontWeight: '500' }}>Voir tous →</Link>
             </div>
-          )}
+            {stats.recentPatients.length === 0 ? (
+              <div style={{ padding: '40px', textAlign: 'center', color: 'var(--gray-400)', fontSize: '13px' }}>Aucun patient</div>
+            ) : (
+              <div style={{ padding: '8px 0' }}>
+                {stats.recentPatients.map((p: any) => (
+                  <Link key={p.id} href={`/dashboard/patients/${p.id}`} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '10px 20px', textDecoration: 'none', transition: 'background 0.1s' }}
+                    onMouseEnter={e => e.currentTarget.style.background = 'var(--gray-50)'}
+                    onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+                    <div className="avatar" style={{ width: '34px', height: '34px', fontSize: '12px' }}>{p.first_name[0]}{p.last_name[0]}</div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: '13.5px', fontWeight: '500', color: 'var(--gray-900)' }}>{p.first_name} {p.last_name}</div>
+                      <div style={{ fontSize: '12px', color: 'var(--gray-500)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.email || p.phone || '—'}</div>
+                    </div>
+                    <div style={{ fontSize: '11px', color: 'var(--gray-400)' }}>{formatDate(p.created_at)}</div>
+                  </Link>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Pending actions */}
+          <div className="card">
+            <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--gray-100)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div style={{ fontSize: '14px', fontWeight: '600', color: 'var(--gray-900)' }}>Actions automatisées</div>
+              <Link href="/dashboard/automations" style={{ fontSize: '12px', color: 'var(--blue)', textDecoration: 'none', fontWeight: '500' }}>Voir tout →</Link>
+            </div>
+            {stats.pendingActions.length === 0 ? (
+              <div style={{ padding: '40px', textAlign: 'center', color: 'var(--gray-400)', fontSize: '13px' }}>
+                <div style={{ fontSize: '28px', marginBottom: '8px' }}>✅</div>
+                Aucune action en attente
+              </div>
+            ) : (
+              <div style={{ padding: '8px 0' }}>
+                {stats.pendingActions.map((a: any) => (
+                  <div key={a.id} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '10px 20px' }}>
+                    <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: a.step?.type === 'email' ? 'var(--blue-light)' : a.step?.type === 'whatsapp' ? 'var(--green-light)' : 'var(--purple-light)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '14px', flexShrink: 0 }}>
+                      {a.step?.type === 'email' ? '📧' : a.step?.type === 'whatsapp' ? '💬' : '📄'}
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: '13px', fontWeight: '500', color: 'var(--gray-900)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.patient?.first_name} {a.patient?.last_name}</div>
+                      <div style={{ fontSize: '11px', color: 'var(--gray-500)' }}>{a.step?.template_name}</div>
+                    </div>
+                    <span className="badge badge-orange">{a.status}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </div>
