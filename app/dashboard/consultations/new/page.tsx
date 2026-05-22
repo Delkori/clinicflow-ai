@@ -2,10 +2,11 @@
 import { useState, useEffect, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter, useSearchParams } from 'next/navigation'
+import { Suspense } from 'react'
 
 type RecordingState = 'idle' | 'recording' | 'paused' | 'processing' | 'done'
 
-export default function NewConsultationPage() {
+function NewConsultationInner() {
   const supabase = createClient()
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -292,5 +293,13 @@ export default function NewConsultationPage() {
         </button>
       </div>
     </div>
+  )
+}
+
+export default function NewConsultationPage() {
+  return (
+    <Suspense fallback={<div className="flex items-center justify-center h-full"><div className="animate-spin w-8 h-8 border-4 border-[var(--blue)] border-t-transparent rounded-full" /></div>}>
+      <NewConsultationInner />
+    </Suspense>
   )
 }
