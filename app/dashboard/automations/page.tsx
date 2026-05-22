@@ -1,7 +1,15 @@
 'use client'
 import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { formatDateTime, STEP_TYPE_LABELS, STEP_TYPE_COLORS } from '@/lib/utils'
+import { formatDateTime } from '@/lib/utils'
+
+const TYPE_CONFIG: Record<string, { icon: string; label: string; bg: string; color: string }> = {
+  email:    { icon: '📧', label: 'Email',     bg: 'var(--blue-light)',   color: 'var(--blue-dark)' },
+  whatsapp: { icon: '💬', label: 'WhatsApp',  bg: 'var(--green-light)',  color: '#059669' },
+  docusign: { icon: '✍️', label: 'DocuSign',  bg: 'var(--purple-light)', color: 'var(--purple)' },
+  document: { icon: '📄', label: 'Document',  bg: 'var(--gray-100)',     color: 'var(--gray-600)' },
+  sms:      { icon: '📱', label: 'SMS',       bg: '#FFFBEB',             color: '#D97706' },
+}
 
 export default function AutomationsPage() {
   const [executions, setExecutions] = useState<any[]>([])
@@ -9,119 +17,134 @@ export default function AutomationsPage() {
   const [filter, setFilter] = useState<'all' | 'pending' | 'sent' | 'failed'>('all')
   const supabase = createClient()
 
-  useEffect(() => {
-    async function load() {
-      let q = supabase
-        .from('workflow_executions')
-        .select('*, patient:patients(first_name, last_name), step:workflow_steps(type, template_name, timing_days, timing_reference), workflow:workflows(name)')
-        .order('scheduled_at', { ascending: true })
-      if (filter !== 'all') q = q.eq('status', filter)
-      const { data } = await q
-      setExecutions(data ?? [])
-      setLoading(false)
-    }
-    load()
-  }, [filter])
+  async function load() {
+    let q = supabase.from('workflow_executions')
+      .select('*, patient:patients(first_name, last_name), step:workflow_steps(type, template_name, timing_days, timing_reference), workflow:workflows(name)')
+      .order('scheduled_at', { ascending: true })
+    if (filter !== 'all') q = q.eq('status', filter)
+    const { data } = await q
+    setExecutions(data ?? [])
+    setLoading(false)
+  }
+
+  useEffect(() => { load() }, [filter])
 
   async function markAsSent(id: string) {
     await supabase.from('workflow_executions').update({ status: 'sent', executed_at: new Date().toISOString() }).eq('id', id)
-    setExecutions(prev => prev.map(e => e.id === id ? { ...e, status: 'sent', executed_at: new Date().toISOString() } : e))
+    setExecutions(prev => prev.map(e => e.id === id ? { ...e, status: 'sent' } : e))
   }
 
-  const counts = { pending: 0, sent: 0, failed: 0 }
-  executions.forEach(e => { if (counts[e.status as keyof typeof counts] !== undefined) counts[e.status as keyof typeof counts]++ })
+  const counts = { pending: 0, sent: 0, failed: 0, total: executions.length }
+  executions.forEach(e => { if (e.status in counts) counts[e.status as keyof typeof counts]++ })
 
   return (
-    <div className="p-6 max-w-5xl mx-auto">
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">Automatisations</h1>
-        <p className="text-gray-500 text-sm mt-1">Log des actions automatisées du parcours patient</p>
+    <div>
+      <div className="page-header">
+        <div className="page-title">Automatisations</div>
+        <div className="page-subtitle">Suivi des actions automatisées du parcours patient</div>
       </div>
 
-      {/* Stats */}
-      <div className="grid grid-cols-3 gap-4 mb-6">
-        <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
-          <p className="text-2xl font-bold text-amber-700">{executions.filter(e => e.status === 'pending').length}</p>
-          <p className="text-xs text-amber-600 mt-1">En attente</p>
+      <div className="page-content">
+        {/* Stats */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px', marginBottom: '24px' }}>
+          {[
+            { label: 'Total', value: counts.total, bg: 'var(--gray-50)', color: 'var(--gray-900)', border: 'var(--gray-200)' },
+            { label: 'En attente', value: executions.filter(e => e.status === 'pending').length, bg: '#FFFBEB', color: '#D97706', border: '#FDE68A' },
+            { label: 'Envoyées', value: executions.filter(e => e.status === 'sent').length, bg: 'var(--green-light)', color: '#059669', border: '#6EE7B7' },
+            { label: 'Échouées', value: executions.filter(e => e.status === 'failed').length, bg: '#FEF2F2', color: '#B91C1C', border: '#FECACA' },
+          ].map((s, i) => (
+            <div key={i} style={{ background: s.bg, border: `1px solid ${s.border}`, borderRadius: '10px', padding: '14px 16px' }}>
+              <div style={{ fontSize: '24px', fontWeight: '700', color: s.color }}>{s.value}</div>
+              <div style={{ fontSize: '12px', color: s.color, opacity: 0.7, marginTop: '2px', fontWeight: '500' }}>{s.label}</div>
+            </div>
+          ))}
         </div>
-        <div className="bg-green-50 border border-green-200 rounded-xl p-4">
-          <p className="text-2xl font-bold text-green-700">{executions.filter(e => e.status === 'sent').length}</p>
-          <p className="text-xs text-green-600 mt-1">Envoyées</p>
-        </div>
-        <div className="bg-red-50 border border-red-200 rounded-xl p-4">
-          <p className="text-2xl font-bold text-red-700">{executions.filter(e => e.status === 'failed').length}</p>
-          <p className="text-xs text-red-600 mt-1">Échouées</p>
-        </div>
-      </div>
 
-      {/* Filters */}
-      <div className="flex gap-2 mb-5">
-        {(['all', 'pending', 'sent', 'failed'] as const).map(f => (
-          <button key={f} onClick={() => setFilter(f)}
-            className={`px-3 py-1.5 rounded-lg text-sm transition-colors ${
-              filter === f ? 'bg-violet-600 text-white' : 'bg-white border border-gray-300 text-gray-600 hover:bg-gray-50'
-            }`}>
-            {f === 'all' ? 'Tous' : f === 'pending' ? '⏳ En attente' : f === 'sent' ? '✅ Envoyées' : '❌ Échouées'}
-          </button>
-        ))}
-      </div>
-
-      {loading ? (
-        <div className="flex justify-center py-16"><div className="animate-spin w-6 h-6 border-4 border-violet-600 border-t-transparent rounded-full" /></div>
-      ) : executions.length === 0 ? (
-        <div className="text-center py-16 text-gray-400 border-2 border-dashed border-gray-200 rounded-xl">
-          <p className="text-4xl mb-2">🤖</p>
-          <p>Aucune automatisation {filter !== 'all' ? `avec statut "${filter}"` : ''}</p>
+        {/* Filters */}
+        <div style={{ display: 'flex', gap: '6px', marginBottom: '16px' }}>
+          {(['all', 'pending', 'sent', 'failed'] as const).map(f => (
+            <button key={f} onClick={() => setFilter(f)} style={{
+              padding: '6px 14px', borderRadius: '20px', fontSize: '13px', fontWeight: '500', cursor: 'pointer',
+              background: filter === f ? 'var(--blue)' : 'white',
+              color: filter === f ? 'white' : 'var(--gray-600)',
+              border: filter === f ? 'none' : '1px solid var(--gray-200)',
+            }}>
+              {f === 'all' ? 'Toutes' : f === 'pending' ? '⏳ En attente' : f === 'sent' ? '✅ Envoyées' : '❌ Échouées'}
+            </button>
+          ))}
         </div>
-      ) : (
-        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-          <table className="w-full">
-            <thead className="bg-gray-50 border-b border-gray-200">
-              <tr>
-                <th className="text-left text-xs font-medium text-gray-500 uppercase px-4 py-3">Patient</th>
-                <th className="text-left text-xs font-medium text-gray-500 uppercase px-4 py-3">Action</th>
-                <th className="text-left text-xs font-medium text-gray-500 uppercase px-4 py-3">Workflow</th>
-                <th className="text-left text-xs font-medium text-gray-500 uppercase px-4 py-3">Planifié</th>
-                <th className="text-left text-xs font-medium text-gray-500 uppercase px-4 py-3">Statut</th>
-                <th className="px-4 py-3" />
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-              {executions.map((e: any) => (
-                <tr key={e.id} className="hover:bg-gray-50">
-                  <td className="px-4 py-3 text-sm text-gray-900">{e.patient?.first_name} {e.patient?.last_name}</td>
-                  <td className="px-4 py-3">
-                    <div className="flex items-center gap-2">
-                      <span className={`text-xs px-2 py-0.5 rounded-full ${STEP_TYPE_COLORS[e.step?.type] ?? 'bg-gray-100 text-gray-600'}`}>
-                        {STEP_TYPE_LABELS[e.step?.type] ?? e.step?.type}
-                      </span>
-                      <span className="text-xs text-gray-600">{e.step?.template_name}</span>
-                    </div>
-                  </td>
-                  <td className="px-4 py-3 text-xs text-gray-500">{e.workflow?.name}</td>
-                  <td className="px-4 py-3 text-xs text-gray-500">{e.scheduled_at ? formatDateTime(e.scheduled_at) : '—'}</td>
-                  <td className="px-4 py-3">
-                    <span className={`text-xs px-2 py-1 rounded-full ${
-                      e.status === 'sent' ? 'bg-green-100 text-green-700' :
-                      e.status === 'failed' ? 'bg-red-100 text-red-700' :
-                      e.status === 'pending' ? 'bg-amber-100 text-amber-700' :
-                      'bg-gray-100 text-gray-600'
-                    }`}>{e.status}</span>
-                  </td>
-                  <td className="px-4 py-3 text-right">
-                    {e.status === 'pending' && (
-                      <button onClick={() => markAsSent(e.id)}
-                        className="text-xs text-violet-600 hover:text-violet-800 font-medium">
-                        Marquer envoyé
-                      </button>
-                    )}
-                  </td>
+
+        <div className="table-wrap">
+          {loading ? (
+            <div style={{ padding: '60px', textAlign: 'center' }}>
+              <div style={{ width: '28px', height: '28px', border: '3px solid var(--gray-200)', borderTopColor: 'var(--blue)', borderRadius: '50%', animation: 'spin 0.7s linear infinite', margin: '0 auto' }} />
+              <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
+            </div>
+          ) : executions.length === 0 ? (
+            <div style={{ padding: '60px', textAlign: 'center', color: 'var(--gray-400)' }}>
+              <div style={{ fontSize: '40px', marginBottom: '12px' }}>⚡</div>
+              <div style={{ fontSize: '14px', fontWeight: '500' }}>Aucune automatisation</div>
+            </div>
+          ) : (
+            <table>
+              <thead>
+                <tr>
+                  <th>Patient</th>
+                  <th>Action</th>
+                  <th>Workflow</th>
+                  <th>Planifié</th>
+                  <th>Statut</th>
+                  <th></th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {executions.map((e: any) => {
+                  const tc = TYPE_CONFIG[e.step?.type] ?? TYPE_CONFIG.document
+                  return (
+                    <tr key={e.id}>
+                      <td>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <div className="avatar" style={{ width: '30px', height: '30px', fontSize: '11px' }}>
+                            {e.patient?.first_name?.[0]}{e.patient?.last_name?.[0]}
+                          </div>
+                          <span style={{ fontSize: '13px', fontWeight: '500' }}>{e.patient?.first_name} {e.patient?.last_name}</span>
+                        </div>
+                      </td>
+                      <td>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <div style={{ width: '28px', height: '28px', borderRadius: '7px', background: tc.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '13px', flexShrink: 0 }}>
+                            {tc.icon}
+                          </div>
+                          <div>
+                            <div style={{ fontSize: '12px', fontWeight: '600', color: tc.color }}>{tc.label}</div>
+                            <div style={{ fontSize: '11px', color: 'var(--gray-500)' }}>{e.step?.template_name}</div>
+                          </div>
+                        </div>
+                      </td>
+                      <td style={{ fontSize: '12px', color: 'var(--gray-500)' }}>{e.workflow?.name}</td>
+                      <td style={{ fontSize: '12px', color: 'var(--gray-600)' }}>{e.scheduled_at ? formatDateTime(e.scheduled_at) : '—'}</td>
+                      <td>
+                        <span className={`badge ${e.status === 'sent' ? 'badge-green' : e.status === 'failed' ? '' : 'badge-gray'}`}
+                          style={e.status === 'failed' ? { background: '#FEF2F2', color: '#B91C1C' } : e.status === 'pending' ? { background: '#FFFBEB', color: '#D97706' } : {}}>
+                          {e.status === 'sent' ? '✓ Envoyé' : e.status === 'failed' ? '✗ Échoué' : '⏳ En attente'}
+                        </span>
+                      </td>
+                      <td>
+                        {e.status === 'pending' && (
+                          <button onClick={() => markAsSent(e.id)}
+                            style={{ background: 'none', border: 'none', color: 'var(--blue)', fontSize: '12px', fontWeight: '500', cursor: 'pointer', padding: '0' }}>
+                            Marquer envoyé
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          )}
         </div>
-      )}
+      </div>
     </div>
   )
 }

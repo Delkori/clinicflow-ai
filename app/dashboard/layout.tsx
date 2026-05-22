@@ -7,6 +7,7 @@ import { createClient } from '@/lib/supabase/client'
 const NAV = [
   { href: '/dashboard', label: 'Tableau de bord', icon: '▦', exact: true },
   { href: '/dashboard/patients', label: 'Patients', icon: '◎' },
+  { href: '/dashboard/import', label: 'Import Doctolib', icon: '📥' },
   { href: '/dashboard/consultations', label: 'Consultations', icon: '✦' },
   { href: '/dashboard/appointments', label: 'Agenda', icon: '◫' },
   { href: '/dashboard/workflows', label: 'Workflows', icon: '⬡' },

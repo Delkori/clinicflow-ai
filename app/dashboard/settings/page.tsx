@@ -1,13 +1,12 @@
 'use client'
 import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import type { Treatment, Clinic, Profile } from '@/lib/types'
 
 export default function SettingsPage() {
-  const [clinic, setClinic] = useState<Clinic | null>(null)
-  const [profile, setProfile] = useState<Profile | null>(null)
-  const [treatments, setTreatments] = useState<Treatment[]>([])
-  const [activeTab, setActiveTab] = useState<'clinic' | 'treatments' | 'account'>('clinic')
+  const [clinic, setClinic] = useState<any>(null)
+  const [profile, setProfile] = useState<any>(null)
+  const [treatments, setTreatments] = useState<any[]>([])
+  const [tab, setTab] = useState<'clinic' | 'treatments' | 'account' | 'integrations'>('clinic')
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [clinicName, setClinicName] = useState('')
@@ -34,14 +33,8 @@ export default function SettingsPage() {
     if (!clinic) return
     setSaving(true)
     await supabase.from('clinics').update({ name: clinicName }).eq('id', clinic.id)
-    setClinic(c => c ? { ...c, name: clinicName } : c)
+    setClinic((c: any) => ({ ...c, name: clinicName }))
     setSaving(false)
-  }
-
-  async function deleteTreatment(id: string) {
-    if (!confirm('Supprimer ce traitement ? Les workflows associés seront également supprimés.')) return
-    await supabase.from('treatments').delete().eq('id', id)
-    setTreatments(ts => ts.filter(t => t.id !== id))
   }
 
   async function seedDefaults() {
@@ -52,173 +45,200 @@ export default function SettingsPage() {
     alert('Traitements et workflows par défaut ajoutés !')
   }
 
-  if (loading) return <div className="flex items-center justify-center h-full"><div className="animate-spin w-6 h-6 border-4 border-violet-600 border-t-transparent rounded-full" /></div>
+  async function deleteTreatment(id: string) {
+    if (!confirm('Supprimer ce traitement ?')) return
+    await supabase.from('treatments').delete().eq('id', id)
+    setTreatments(ts => ts.filter(t => t.id !== id))
+  }
 
-  const tabs = [
-    { id: 'clinic', label: '🏥 Clinique' },
-    { id: 'treatments', label: '💊 Traitements' },
-    { id: 'account', label: '👤 Compte' },
+  const TABS = [
+    { id: 'clinic', label: 'Clinique', icon: '🏥' },
+    { id: 'treatments', label: 'Traitements', icon: '💊' },
+    { id: 'integrations', label: 'Intégrations', icon: '🔌' },
+    { id: 'account', label: 'Mon compte', icon: '👤' },
   ]
 
-  return (
-    <div className="p-6 max-w-3xl mx-auto">
-      <h1 className="text-2xl font-bold text-gray-900 mb-6">Paramètres</h1>
+  if (loading) return <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}><div style={{ width: '28px', height: '28px', border: '3px solid var(--gray-200)', borderTopColor: 'var(--blue)', borderRadius: '50%', animation: 'spin 0.7s linear infinite' }} /><style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style></div>
 
-      {/* Tabs */}
-      <div className="flex gap-1 mb-6 bg-gray-100 rounded-lg p-1 w-fit">
-        {tabs.map(tab => (
-          <button key={tab.id} onClick={() => setActiveTab(tab.id as any)}
-            className={`py-2 px-4 rounded-md text-sm font-medium transition-colors ${
-              activeTab === tab.id ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
-            }`}>
-            {tab.label}
-          </button>
-        ))}
+  return (
+    <div>
+      <div className="page-header">
+        <div className="page-title">Paramètres</div>
+        <div className="page-subtitle">Configuration de votre espace clinique</div>
       </div>
 
-      {activeTab === 'clinic' && (
-        <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
-          <h2 className="font-semibold text-gray-900">Informations de la clinique</h2>
-          <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">Nom de la clinique</label>
-            <input type="text" value={clinicName} onChange={e => setClinicName(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-violet-500" />
+      <div className="page-content">
+        <div style={{ display: 'flex', gap: '24px' }}>
+          {/* Sidebar tabs */}
+          <div style={{ width: '200px', flexShrink: 0 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+              {TABS.map(t => (
+                <button key={t.id} onClick={() => setTab(t.id as any)} style={{
+                  display: 'flex', alignItems: 'center', gap: '10px',
+                  padding: '9px 12px', borderRadius: '8px', border: 'none',
+                  background: tab === t.id ? 'var(--blue-light)' : 'transparent',
+                  color: tab === t.id ? 'var(--blue)' : 'var(--gray-600)',
+                  fontSize: '13.5px', fontWeight: tab === t.id ? '600' : '400',
+                  cursor: 'pointer', textAlign: 'left', width: '100%',
+                }}>
+                  <span>{t.icon}</span>
+                  <span>{t.label}</span>
+                </button>
+              ))}
+            </div>
           </div>
-          <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">ID Clinique</label>
-            <p className="text-sm text-gray-500 bg-gray-50 px-3 py-2 rounded-lg font-mono">{clinic?.id}</p>
-          </div>
-          <button onClick={saveClinic} disabled={saving}
-            className="bg-violet-600 hover:bg-violet-700 text-white px-4 py-2 rounded-lg text-sm font-medium disabled:opacity-60">
-            {saving ? 'Sauvegarde...' : 'Sauvegarder'}
-          </button>
 
-          {/* Seed defaults */}
-          <div className="border-t pt-4 mt-4">
-            <h3 className="font-medium text-gray-900 mb-2">Données de démarrage</h3>
-            <p className="text-sm text-gray-500 mb-3">Ajoutez les traitements et workflows par défaut (Greffe, Laser, HA)</p>
-            <button onClick={seedDefaults}
-              className="border border-violet-300 text-violet-600 hover:bg-violet-50 px-4 py-2 rounded-lg text-sm font-medium transition-colors">
-              🚀 Importer les traitements & workflows par défaut
-            </button>
-          </div>
-        </div>
-      )}
-
-      {activeTab === 'treatments' && (
-        <div>
-          <div className="flex items-center justify-between mb-4">
-            <p className="text-sm text-gray-500">{treatments.length} traitement{treatments.length > 1 ? 's' : ''}</p>
-            <button onClick={() => setShowNewTreatment(true)}
-              className="bg-violet-600 text-white px-3 py-1.5 rounded-lg text-sm font-medium hover:bg-violet-700 transition-colors">
-              + Nouveau traitement
-            </button>
-          </div>
-          <div className="space-y-2">
-            {treatments.map(t => (
-              <div key={t.id} className="bg-white border border-gray-200 rounded-xl p-4 flex items-center gap-3">
-                <div className="w-4 h-4 rounded-full flex-shrink-0" style={{ background: t.color }} />
-                <div className="flex-1">
-                  <p className="font-medium text-gray-900">{t.name}</p>
-                  {t.description && <p className="text-xs text-gray-500 mt-0.5">{t.description}</p>}
+          {/* Content */}
+          <div style={{ flex: 1, minWidth: 0 }}>
+            {tab === 'clinic' && (
+              <div className="card" style={{ padding: '24px' }}>
+                <div style={{ fontSize: '15px', fontWeight: '600', marginBottom: '20px', color: 'var(--gray-900)' }}>Informations de la clinique</div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', maxWidth: '400px' }}>
+                  <div>
+                    <label className="label">Nom de la clinique</label>
+                    <input className="input" value={clinicName} onChange={e => setClinicName(e.target.value)} />
+                  </div>
+                  <div>
+                    <label className="label">Identifiant clinique</label>
+                    <div style={{ padding: '8px 12px', background: 'var(--gray-50)', border: '1px solid var(--gray-200)', borderRadius: '8px', fontSize: '12px', fontFamily: 'monospace', color: 'var(--gray-500)' }}>{clinic?.id}</div>
+                  </div>
+                  <button onClick={saveClinic} disabled={saving} className="btn-primary" style={{ width: 'fit-content' }}>
+                    {saving ? 'Sauvegarde...' : 'Sauvegarder'}
+                  </button>
                 </div>
-                <button onClick={() => deleteTreatment(t.id)}
-                  className="text-gray-300 hover:text-red-500 transition-colors text-sm">🗑️</button>
+
+                <div style={{ borderTop: '1px solid var(--gray-100)', marginTop: '28px', paddingTop: '24px' }}>
+                  <div style={{ fontSize: '14px', fontWeight: '600', marginBottom: '6px', color: 'var(--gray-900)' }}>Données de démarrage</div>
+                  <div style={{ fontSize: '13px', color: 'var(--gray-500)', marginBottom: '14px' }}>Importez les traitements et workflows Doctolib par défaut : Greffe de cheveux (8 étapes), Laser visage (4 étapes), Acide hyaluronique.</div>
+                  <button onClick={seedDefaults} className="btn-secondary" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    🚀 Importer les traitements & workflows par défaut
+                  </button>
+                </div>
               </div>
-            ))}
-            {treatments.length === 0 && (
-              <div className="text-center py-8 text-gray-400 border-2 border-dashed border-gray-200 rounded-xl">
-                <p className="text-3xl mb-2">💊</p>
-                <p className="text-sm">Aucun traitement configuré</p>
+            )}
+
+            {tab === 'treatments' && (
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
+                  <div style={{ fontSize: '13px', color: 'var(--gray-500)' }}>{treatments.length} traitement{treatments.length > 1 ? 's' : ''} configuré{treatments.length > 1 ? 's' : ''}</div>
+                  <button onClick={() => setShowNewTreatment(true)} className="btn-primary" style={{ fontSize: '13px' }}>+ Nouveau traitement</button>
+                </div>
+                {treatments.length === 0 ? (
+                  <div className="card" style={{ padding: '40px', textAlign: 'center', color: 'var(--gray-400)' }}>
+                    <div style={{ fontSize: '36px', marginBottom: '12px' }}>💊</div>
+                    <div style={{ fontSize: '14px', fontWeight: '500' }}>Aucun traitement</div>
+                  </div>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    {treatments.map(t => (
+                      <div key={t.id} className="card" style={{ padding: '14px 18px', display: 'flex', alignItems: 'center', gap: '14px' }}>
+                        <div style={{ width: '12px', height: '12px', borderRadius: '50%', background: t.color, flexShrink: 0 }} />
+                        <div style={{ flex: 1 }}>
+                          <div style={{ fontSize: '14px', fontWeight: '500', color: 'var(--gray-900)' }}>{t.name}</div>
+                          {t.description && <div style={{ fontSize: '12px', color: 'var(--gray-500)' }}>{t.description}</div>}
+                        </div>
+                        <button onClick={() => deleteTreatment(t.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--gray-300)', fontSize: '14px' }}>🗑️</button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {tab === 'integrations' && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                {[
+                  { name: 'Doctolib', icon: '📅', desc: 'Import de patients et rendez-vous', status: 'Import CSV disponible', badge: 'badge-green', href: '/dashboard/import' },
+                  { name: 'OpenAI Whisper', icon: '🎙️', desc: 'Transcription audio des consultations', status: 'Clé API requise', badge: 'badge-gray' },
+                  { name: 'Resend', icon: '📧', desc: 'Envoi d\'emails automatiques', status: 'Clé API requise', badge: 'badge-gray' },
+                  { name: 'Twilio WhatsApp', icon: '💬', desc: 'Messages WhatsApp automatisés', status: 'Clé API requise', badge: 'badge-gray' },
+                  { name: 'DocuSign', icon: '✍️', desc: 'Signature électronique des documents', status: 'Bientôt disponible', badge: 'badge-orange' },
+                ].map(int => (
+                  <div key={int.name} className="card" style={{ padding: '16px 20px', display: 'flex', alignItems: 'center', gap: '16px' }}>
+                    <div style={{ width: '40px', height: '40px', borderRadius: '10px', background: 'var(--gray-100)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '20px', flexShrink: 0 }}>{int.icon}</div>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: '14px', fontWeight: '600', color: 'var(--gray-900)' }}>{int.name}</div>
+                      <div style={{ fontSize: '12px', color: 'var(--gray-500)' }}>{int.desc}</div>
+                    </div>
+                    <span className={`badge ${int.badge}`}>{int.status}</span>
+                    {int.href && <a href={int.href} className="btn-primary" style={{ textDecoration: 'none', fontSize: '12px', padding: '6px 12px' }}>Utiliser →</a>}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {tab === 'account' && (
+              <div className="card" style={{ padding: '24px', maxWidth: '400px' }}>
+                <div style={{ fontSize: '15px', fontWeight: '600', marginBottom: '20px' }}>Mon compte</div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                  {[
+                    { label: 'Nom complet', value: profile?.full_name },
+                    { label: 'Email', value: profile?.email },
+                    { label: 'Rôle', value: profile?.role },
+                  ].map(f => (
+                    <div key={f.label}>
+                      <label className="label">{f.label}</label>
+                      <div style={{ padding: '8px 12px', background: 'var(--gray-50)', border: '1px solid var(--gray-200)', borderRadius: '8px', fontSize: '14px', color: 'var(--gray-700)', textTransform: f.label === 'Rôle' ? 'capitalize' : 'none' }}>
+                        {f.value || '—'}
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
           </div>
-
-          {showNewTreatment && (
-            <NewTreatmentModal
-              clinicId={clinic?.id ?? ''}
-              onClose={() => setShowNewTreatment(false)}
-              onCreated={(t) => { setTreatments(ts => [...ts, t]); setShowNewTreatment(false) }}
-            />
-          )}
         </div>
-      )}
+      </div>
 
-      {activeTab === 'account' && (
-        <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
-          <h2 className="font-semibold text-gray-900">Mon compte</h2>
-          <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">Nom complet</label>
-            <p className="text-sm text-gray-700 bg-gray-50 px-3 py-2 rounded-lg">{profile?.full_name}</p>
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">Email</label>
-            <p className="text-sm text-gray-700 bg-gray-50 px-3 py-2 rounded-lg">{profile?.email}</p>
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">Rôle</label>
-            <span className="inline-block text-sm px-3 py-1 bg-violet-100 text-violet-700 rounded-full capitalize">{profile?.role}</span>
-          </div>
-        </div>
+      {showNewTreatment && (
+        <NewTreatmentModal
+          clinicId={clinic?.id ?? ''}
+          onClose={() => setShowNewTreatment(false)}
+          onCreated={(t: any) => { setTreatments(ts => [...ts, t]); setShowNewTreatment(false) }}
+        />
       )}
     </div>
   )
 }
 
-function NewTreatmentModal({ clinicId, onClose, onCreated }: {
-  clinicId: string, onClose: () => void, onCreated: (t: Treatment) => void
-}) {
+function NewTreatmentModal({ clinicId, onClose, onCreated }: any) {
   const supabase = createClient()
-  const [form, setForm] = useState({ name: '', description: '', color: '#8b5cf6' })
+  const [form, setForm] = useState({ name: '', description: '', color: '#0596DE' })
   const [loading, setLoading] = useState(false)
-
-  const update = (k: string) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
-    setForm(f => ({ ...f, [k]: e.target.value }))
+  const COLORS = ['#0596DE', '#7C3AED', '#059669', '#D97706', '#DC2626', '#DB2777', '#2563EB', '#0F172A']
+  const update = (k: string) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => setForm(f => ({ ...f, [k]: e.target.value }))
 
   async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault()
-    setLoading(true)
+    e.preventDefault(); setLoading(true)
     const { data } = await supabase.from('treatments').insert({ ...form, clinic_id: clinicId }).select().single()
     setLoading(false)
-    if (data) onCreated(data as Treatment)
+    if (data) onCreated(data)
   }
 
-  const COLORS = ['#8b5cf6', '#06b6d4', '#10b981', '#f59e0b', '#ef4444', '#ec4899', '#3b82f6', '#6366f1']
-
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md">
-        <div className="flex items-center justify-between p-5 border-b">
-          <h2 className="font-bold text-gray-900">Nouveau traitement</h2>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl">×</button>
+    <div className="modal-overlay">
+      <div className="modal">
+        <div className="modal-header">
+          <div className="modal-title">Nouveau traitement</div>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '18px', color: 'var(--gray-400)' }}>×</button>
         </div>
-        <form onSubmit={handleSubmit} className="p-5 space-y-4">
-          <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">Nom *</label>
-            <input type="text" value={form.name} onChange={update('name')} required
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-violet-500"
-              placeholder="Greffe de cheveux, Laser..." />
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">Description</label>
-            <textarea value={form.description} onChange={update('description')} rows={2}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-violet-500 resize-none" />
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-gray-700 mb-2">Couleur</label>
-            <div className="flex gap-2">
-              {COLORS.map(c => (
-                <button key={c} type="button" onClick={() => setForm(f => ({ ...f, color: c }))}
-                  className={`w-7 h-7 rounded-full transition-transform ${form.color === c ? 'scale-125 ring-2 ring-offset-1 ring-gray-400' : 'hover:scale-110'}`}
-                  style={{ background: c }} />
-              ))}
+        <form onSubmit={handleSubmit}>
+          <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+            <div><label className="label">Nom *</label><input className="input" value={form.name} onChange={update('name')} required placeholder="Greffe de cheveux..." /></div>
+            <div><label className="label">Description</label><textarea className="input" value={form.description} onChange={update('description')} rows={2} style={{ resize: 'none' }} /></div>
+            <div>
+              <label className="label">Couleur</label>
+              <div style={{ display: 'flex', gap: '8px', marginTop: '4px' }}>
+                {COLORS.map(c => (
+                  <button key={c} type="button" onClick={() => setForm(f => ({ ...f, color: c }))}
+                    style={{ width: '28px', height: '28px', borderRadius: '50%', background: c, border: form.color === c ? '3px solid var(--gray-900)' : '2px solid transparent', cursor: 'pointer', transform: form.color === c ? 'scale(1.15)' : 'scale(1)', transition: 'all 0.1s' }} />
+                ))}
+              </div>
             </div>
           </div>
-          <div className="flex gap-3">
-            <button type="button" onClick={onClose} className="flex-1 border border-gray-300 text-gray-700 py-2 rounded-lg text-sm hover:bg-gray-50">Annuler</button>
-            <button type="submit" disabled={loading} className="flex-1 bg-violet-600 text-white py-2 rounded-lg text-sm font-medium hover:bg-violet-700 disabled:opacity-60">
-              {loading ? 'Création...' : 'Créer'}
-            </button>
+          <div className="modal-footer">
+            <button type="button" onClick={onClose} className="btn-secondary">Annuler</button>
+            <button type="submit" disabled={loading} className="btn-primary">{loading ? 'Création...' : 'Créer'}</button>
           </div>
         </form>
       </div>
