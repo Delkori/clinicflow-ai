@@ -10,11 +10,13 @@ const NAV_MAIN = [
   { href:'/dashboard/consultations', label:'Consultations',  icon:'✦' },
   { href:'/dashboard/agenda',        label:'Agenda',         icon:'◫' },
   { href:'/dashboard/documents',     label:'Documents',      icon:'📄' },
+  { href:'/dashboard/booking',       label:'RDV en ligne',   icon:'🔗' },
 ]
 const NAV_TOOLS = [
   { href:'/dashboard/automations',   label:'Automatisations',icon:'⚡' },
   { href:'/dashboard/workflows',     label:'Workflows',      icon:'⬡' },
-  { href:'/dashboard/integrations',  label:'Intégrations',   icon:'🔗' },
+  { href:'/dashboard/integrations',  label:'Intégrations',   icon:'🔌' },
+  { href:'/dashboard/team',          label:'Équipe',         icon:'👥' },
   { href:'/dashboard/analytics',     label:'Analytiques',    icon:'▲' },
 ]
 
