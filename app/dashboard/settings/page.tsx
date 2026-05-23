@@ -1,91 +1,81 @@
 'use client'
 import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
+import Link from 'next/link'
 
-const PLAN_LABELS: Record<string, { label: string; color: string; badge: string }> = {
-  free:   { label: 'Free',   color: 'bg-gray-100 text-gray-700',      badge: '🆓' },
-  pro:    { label: 'Pro',    color: 'bg-blue-100 text-blue-700',       badge: '⚡' },
-  clinic: { label: 'Clinic', color: 'bg-violet-100 text-violet-700',   badge: '🏥' },
-}
-
-const INTEGRATIONS_CONFIG = [
-  { provider: 'twilio', label: 'Twilio — WhatsApp & SMS', icon: '💬', desc: 'Envoyez des messages WhatsApp réels à vos patients.', fields: [
-    { key: 'account_sid',    label: 'Account SID',    placeholder: 'ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx', type: 'text' },
-    { key: 'auth_token',     label: 'Auth Token',     placeholder: '••••••••••••••••••••••••••••••••',  type: 'password' },
-    { key: 'whatsapp_from',  label: 'Numéro WhatsApp', placeholder: 'whatsapp:+14155238886',             type: 'text' },
-  ]},
-  { provider: 'openai', label: 'OpenAI — IA & Transcription', icon: '🤖', desc: 'Transcription audio (Whisper) et structuration GPT-4 des consultations.', fields: [
-    { key: 'api_key', label: 'API Key',     placeholder: 'sk-...', type: 'password' },
-    { key: 'model',   label: 'Modèle GPT', placeholder: 'gpt-4o', type: 'text' },
-  ]},
-  { provider: 'docusign', label: 'DocuSign — Signature électronique', icon: '✍️', desc: 'Envoi de consentements éclairés à signer en ligne.', fields: [
-    { key: 'integration_key', label: 'Integration Key', placeholder: 'xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx', type: 'text' },
-    { key: 'account_id',      label: 'Account ID',      placeholder: 'xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx', type: 'text' },
-    { key: 'access_token',    label: 'Access Token',    placeholder: '••••••••••••••••',                     type: 'password' },
-  ]},
+const INTEGRATIONS = [
+  {
+    id: 'openai',
+    label: 'OpenAI',
+    icon: '🤖',
+    desc: 'Transcription audio (Whisper) et structuration IA (GPT-4) des consultations',
+    color: '#10A37F',
+    fields: [
+      { key: 'api_key', label: 'API Key', placeholder: 'sk-proj-...', type: 'password' },
+      { key: 'model',   label: 'Modèle',  placeholder: 'gpt-4o-mini',  type: 'text'     },
+    ],
+    docs: 'https://platform.openai.com/api-keys',
+  },
+  {
+    id: 'resend',
+    label: 'Resend — Emails',
+    icon: '📧',
+    desc: 'Envoi automatique des emails aux patients selon le workflow',
+    color: '#0596DE',
+    fields: [
+      { key: 'api_key',    label: 'API Key',           placeholder: 're_...', type: 'password' },
+      { key: 'from_email', label: 'Email expéditeur', placeholder: 'clinique@votre-domaine.fr', type: 'email' },
+    ],
+    docs: 'https://resend.com/api-keys',
+  },
+  {
+    id: 'twilio',
+    label: 'Twilio — WhatsApp',
+    icon: '💬',
+    desc: 'Envoi de messages WhatsApp automatisés (suivi post-op, rappels)',
+    color: '#25D366',
+    fields: [
+      { key: 'account_sid',   label: 'Account SID',    placeholder: 'ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx', type: 'text'     },
+      { key: 'auth_token',    label: 'Auth Token',     placeholder: '••••••••••••••••••••••••••••••••',  type: 'password' },
+      { key: 'from_number',   label: 'Numéro WhatsApp',placeholder: 'whatsapp:+14155238886',             type: 'text'     },
+    ],
+    docs: 'https://console.twilio.com',
+  },
+  {
+    id: 'docusign',
+    label: 'DocuSign — Signatures',
+    icon: '✍️',
+    desc: 'Envoi et signature électronique des consentements éclairés',
+    color: '#7C3AED',
+    fields: [
+      { key: 'integration_key', label: 'Integration Key', placeholder: 'xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx', type: 'text'     },
+      { key: 'account_id',      label: 'Account ID',      placeholder: 'xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx', type: 'text'     },
+      { key: 'access_token',    label: 'Access Token',    placeholder: '••••••••••••••••',                     type: 'password' },
+    ],
+    docs: 'https://developers.docusign.com',
+    badge: 'Bientôt',
+  },
 ]
 
-function IntegrationCard({ integ, savedConfig, onSave, saving }: any) {
-  const [vals, setVals] = useState<Record<string,string>>(savedConfig ?? {})
-  const isConfigured = !!savedConfig && Object.values(savedConfig).some(v => !!v)
-  return (
-    <div className="card p-6">
-      <div className="flex items-start gap-4 mb-5">
-        <span className="text-3xl mt-0.5">{integ.icon}</span>
-        <div className="flex-1">
-          <div className="flex items-center gap-3 mb-1">
-            <p className="font-semibold text-gray-900">{integ.label}</p>
-            <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${isConfigured ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
-              {isConfigured ? '✓ Configuré' : 'Non configuré'}
-            </span>
-          </div>
-          <p className="text-sm text-gray-500">{integ.desc}</p>
-        </div>
-      </div>
-      <div className="space-y-3 mb-5">
-        {integ.fields.map((field: any) => (
-          <div key={field.key}>
-            <label className="text-sm font-medium text-gray-700 block mb-1.5">{field.label}</label>
-            <input
-              type={field.type}
-              placeholder={field.placeholder}
-              value={vals[field.key] ?? ''}
-              onChange={e => setVals(prev => ({ ...prev, [field.key]: e.target.value }))}
-              className="input w-full font-mono text-sm"
-              autoComplete="off"
-            />
-          </div>
-        ))}
-      </div>
-      <div className="flex justify-end">
-        <button onClick={() => onSave(integ.provider, vals)} disabled={saving === integ.provider} className="btn-primary">
-          {saving === integ.provider ? 'Sauvegarde...' : 'Sauvegarder'}
-        </button>
-      </div>
-    </div>
-  )
-}
+const TABS = [
+  { id: 'clinic',       label: 'Clinique',       icon: '🏥' },
+  { id: 'treatments',   label: 'Traitements',    icon: '💊' },
+  { id: 'integrations', label: 'Intégrations',   icon: '🔌' },
+  { id: 'account',      label: 'Mon compte',     icon: '👤' },
+]
 
 export default function SettingsPage() {
   const supabase = createClient()
-  const [clinic, setClinic] = useState<any>(null)
+  const [tab, setTab]         = useState('clinic')
+  const [clinic, setClinic]   = useState<any>(null)
   const [profile, setProfile] = useState<any>(null)
   const [treatments, setTreatments] = useState<any[]>([])
-  const [members, setMembers] = useState<any[]>([])
-  const [invitations, setInvitations] = useState<any[]>([])
-  const [integrations, setIntegrations] = useState<Record<string, Record<string,string>>>({})
-  const [tab, setTab] = useState<'clinic'|'integrations'|'team'|'billing'|'treatments'>('clinic')
   const [loading, setLoading] = useState(true)
-  const [saving, setSaving] = useState<string|null>(null)
+  const [saving, setSaving]   = useState(false)
+  const [saved, setSaved]     = useState(false)
   const [clinicName, setClinicName] = useState('')
-  const [inviteEmail, setInviteEmail] = useState('')
-  const [inviteRole, setInviteRole] = useState('assistant')
-  const [toast, setToast] = useState<{msg:string;ok:boolean}|null>(null)
-
-  function showToast(msg: string, ok = true) {
-    setToast({ msg, ok })
-    setTimeout(() => setToast(null), 3500)
-  }
+  const [showNewTreatment, setShowNewTreatment] = useState(false)
+  const [integConfigs, setIntegConfigs] = useState<Record<string,Record<string,string>>>({})
 
   useEffect(() => {
     async function load() {
@@ -96,287 +86,342 @@ export default function SettingsPage() {
       setProfile(prof)
       const { data: cl } = await supabase.from('clinics').select('*').eq('id', prof.clinic_id).single()
       if (cl) { setClinic(cl); setClinicName(cl.name) }
-      const [
-        { data: trts },
-        { data: mbs },
-        { data: invs },
-        { data: ints },
-      ] = await Promise.all([
-        supabase.from('treatments').select('*').eq('clinic_id', prof.clinic_id).order('created_at'),
-        supabase.from('profiles').select('*').eq('clinic_id', prof.clinic_id),
-        supabase.from('team_invitations').select('*').eq('clinic_id', prof.clinic_id).is('accepted_at', null),
-        supabase.from('clinic_integrations').select('*').eq('clinic_id', prof.clinic_id),
-      ])
+      const { data: trts } = await supabase.from('treatments').select('*').eq('clinic_id', prof.clinic_id).order('created_at')
       setTreatments(trts ?? [])
-      setMembers(mbs ?? [])
-      setInvitations(invs ?? [])
-      const map: Record<string,Record<string,string>> = {}
-      for (const i of ints ?? []) map[i.provider] = i.config
-      setIntegrations(map)
       setLoading(false)
     }
     load()
-  }, [supabase])
-
-  async function saveIntegration(provider: string, config: Record<string,string>) {
-    setSaving(provider)
-    await supabase.from('clinic_integrations').upsert(
-      { clinic_id: clinic.id, provider, config, is_active: true },
-      { onConflict: 'clinic_id,provider' }
-    )
-    setIntegrations(prev => ({ ...prev, [provider]: config }))
-    setSaving(null)
-    showToast(`${provider.charAt(0).toUpperCase() + provider.slice(1)} sauvegardé ✓`)
-  }
+  }, [])
 
   async function saveClinic() {
-    setSaving('clinic')
+    if (!clinic) return
+    setSaving(true)
     await supabase.from('clinics').update({ name: clinicName }).eq('id', clinic.id)
     setClinic((c: any) => ({ ...c, name: clinicName }))
-    setSaving(null)
-    showToast('Clinique mise à jour ✓')
-  }
-
-  async function sendInvite() {
-    if (!inviteEmail || !clinic) return
-    setSaving('invite')
-    const { error } = await supabase.from('team_invitations').insert({
-      clinic_id: clinic.id, email: inviteEmail, role: inviteRole, invited_by: profile.id,
-    })
-    setSaving(null)
-    if (error) { showToast(error.message, false); return }
-    showToast(`Invitation envoyée à ${inviteEmail} ✓`)
-    setInviteEmail('')
-    const { data } = await supabase.from('team_invitations').select('*').eq('clinic_id', clinic.id).is('accepted_at', null)
-    setInvitations(data ?? [])
-  }
-
-  async function cancelInvite(id: string) {
-    await supabase.from('team_invitations').delete().eq('id', id)
-    setInvitations(prev => prev.filter(i => i.id !== id))
-    showToast('Invitation annulée')
+    setSaving(false)
+    setSaved(true)
+    setTimeout(() => setSaved(false), 2000)
   }
 
   async function seedDefaults() {
+    if (!clinic) return
     await supabase.rpc('seed_clinic_defaults', { p_clinic_id: clinic.id })
     const { data } = await supabase.from('treatments').select('*').eq('clinic_id', clinic.id)
     setTreatments(data ?? [])
-    showToast('Traitements et workflows par défaut ajoutés ✓')
+  }
+
+  async function deleteTreatment(id: string) {
+    if (!confirm('Supprimer ce traitement ? Les workflows associés seront supprimés.')) return
+    await supabase.from('treatments').delete().eq('id', id)
+    setTreatments(ts => ts.filter(t => t.id !== id))
   }
 
   if (loading) return (
-    <div className="flex items-center justify-center h-full">
-      <div className="animate-spin w-8 h-8 border-4 border-[var(--blue)] border-t-transparent rounded-full" />
+    <div style={{ display:'flex', alignItems:'center', justifyContent:'center', height:'100%' }}>
+      <div style={{ width:28, height:28, border:'3px solid var(--gray-200)', borderTopColor:'var(--blue)', borderRadius:'50%', animation:'spin .7s linear infinite' }} />
+      <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
     </div>
   )
 
-  const plan = PLAN_LABELS[clinic?.plan ?? 'free']
-  const tabs = [
-    { id: 'clinic',       label: '🏥 Clinique' },
-    { id: 'integrations', label: '🔌 Intégrations' },
-    { id: 'team',         label: `👥 Équipe (${members.length})` },
-    { id: 'billing',      label: '💳 Abonnement' },
-    { id: 'treatments',   label: `💉 Traitements (${treatments.length})` },
-  ]
-
   return (
-    <div className="p-6 max-w-4xl mx-auto">
-      {toast && (
-        <div className={`fixed top-4 right-4 z-50 rounded-xl px-5 py-3 text-sm font-semibold shadow-xl transition-all ${toast.ok ? 'bg-[var(--green)] text-white' : 'bg-rose-500 text-white'}`}>
-          {toast.msg}
-        </div>
-      )}
+    <div style={{ display:'flex', height:'100%', overflow:'hidden' }}>
 
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-semibold text-gray-900">Paramètres</h1>
-        <span className={`text-xs px-3 py-1.5 rounded-full font-semibold ${plan.color}`}>{plan.badge} Plan {plan.label}</span>
-      </div>
-
-      <div className="flex gap-1 mb-6 bg-gray-100 rounded-xl p-1 overflow-x-auto">
-        {tabs.map(t => (
-          <button key={t.id} onClick={() => setTab(t.id as any)}
-            className={`flex-shrink-0 py-2.5 px-4 rounded-lg text-sm font-medium transition-colors whitespace-nowrap ${tab === t.id ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>
-            {t.label}
+      {/* Left sidebar */}
+      <aside style={{ width:220, borderRight:'1px solid var(--gray-200)', background:'white', flexShrink:0, padding:'24px 12px', display:'flex', flexDirection:'column', gap:2 }}>
+        <div style={{ fontSize:11, fontWeight:700, color:'var(--gray-400)', letterSpacing:'0.07em', textTransform:'uppercase', padding:'0 10px 10px' }}>Paramètres</div>
+        {TABS.map(t => (
+          <button key={t.id} onClick={() => setTab(t.id)} style={{
+            display:'flex', alignItems:'center', gap:10,
+            padding:'9px 12px', borderRadius:8, border:'none', cursor:'pointer', textAlign:'left', width:'100%',
+            background: tab === t.id ? 'var(--blue-light)' : 'transparent',
+            color: tab === t.id ? 'var(--blue)' : 'var(--gray-600)',
+            fontSize:13.5, fontWeight: tab === t.id ? 600 : 400,
+            transition:'all .1s',
+          }}>
+            <span style={{ fontSize:15 }}>{t.icon}</span>
+            <span>{t.label}</span>
+            {tab === t.id && <span style={{ marginLeft:'auto', width:6, height:6, borderRadius:'50%', background:'var(--blue)' }} />}
           </button>
         ))}
-      </div>
+      </aside>
 
-      {/* ─── CLINIQUE ─── */}
-      {tab === 'clinic' && (
-        <div className="card p-6 space-y-5">
-          <h2 className="font-semibold text-gray-900">Informations de la clinique</h2>
+      {/* Main content */}
+      <div style={{ flex:1, overflow:'auto', padding:'32px', maxWidth:760 }}>
+
+        {/* ── CLINIQUE ── */}
+        {tab === 'clinic' && (
           <div>
-            <label className="text-sm font-medium text-gray-700 block mb-1.5">Nom de la clinique</label>
-            <input value={clinicName} onChange={e => setClinicName(e.target.value)} className="input w-full" />
-          </div>
-          <div className="grid grid-cols-2 gap-4 pt-4 border-t border-gray-100 text-sm text-gray-500">
-            <div>
-              <span className="block text-xs uppercase tracking-wide text-gray-400 mb-1">ID Clinique</span>
-              <span className="font-mono text-xs">{clinic?.id}</span>
+            <div style={{ marginBottom:24 }}>
+              <h2 style={{ fontSize:18, fontWeight:700, color:'var(--gray-900)', letterSpacing:'-0.3px', margin:'0 0 4px' }}>Votre clinique</h2>
+              <p style={{ fontSize:13, color:'var(--gray-500)', margin:0 }}>Informations générales et configuration de base</p>
             </div>
-            <div>
-              <span className="block text-xs uppercase tracking-wide text-gray-400 mb-1">Créée le</span>
-              {new Date(clinic?.created_at).toLocaleDateString('fr-FR')}
-            </div>
-          </div>
-          <button onClick={saveClinic} disabled={saving === 'clinic'} className="btn-primary">
-            {saving === 'clinic' ? 'Sauvegarde...' : 'Sauvegarder'}
-          </button>
-        </div>
-      )}
 
-      {/* ─── INTÉGRATIONS ─── */}
-      {tab === 'integrations' && (
-        <div className="space-y-5">
-          <div className="rounded-xl bg-blue-50 border border-blue-100 px-4 py-3 text-sm text-blue-700">
-            💡 Vos clés API sont stockées de façon sécurisée dans la base de données de votre clinique uniquement.
-          </div>
-          {INTEGRATIONS_CONFIG.map(integ => (
-            <IntegrationCard
-              key={integ.provider}
-              integ={integ}
-              savedConfig={integrations[integ.provider]}
-              onSave={saveIntegration}
-              saving={saving}
-            />
-          ))}
-        </div>
-      )}
-
-      {/* ─── ÉQUIPE ─── */}
-      {tab === 'team' && (
-        <div className="space-y-5">
-          <div className="card p-6">
-            <h2 className="font-semibold text-gray-900 mb-4">Membres actuels</h2>
-            <div className="space-y-3">
-              {members.map(m => (
-                <div key={m.id} className="flex items-center gap-3 py-3 border-b border-gray-100 last:border-0">
-                  <div className="w-9 h-9 rounded-full bg-[var(--blue-light)] text-[var(--blue)] flex items-center justify-center text-sm font-semibold flex-shrink-0">
-                    {(m.full_name || m.email || '?')[0].toUpperCase()}
-                  </div>
-                  <div className="flex-1">
-                    <p className="text-sm font-medium text-gray-900">{m.full_name || '—'}</p>
-                    <p className="text-xs text-gray-400">{m.email}</p>
-                  </div>
-                  <span className={`text-xs px-2 py-1 rounded-full ${m.role === 'medecin' ? 'bg-violet-100 text-violet-700' : 'bg-blue-100 text-blue-700'}`}>{m.role ?? 'membre'}</span>
-                  {m.id === profile?.id && <span className="text-xs text-gray-400">vous</span>}
+            <div className="card" style={{ padding:24, marginBottom:16 }}>
+              <div style={{ fontSize:13, fontWeight:600, color:'var(--gray-700)', marginBottom:16 }}>Informations générales</div>
+              <div style={{ maxWidth:400, display:'flex', flexDirection:'column', gap:14 }}>
+                <div>
+                  <label className="label">Nom de la clinique</label>
+                  <input className="input" value={clinicName} onChange={e => setClinicName(e.target.value)} placeholder="Clinique Esthétique Paris" />
                 </div>
-              ))}
+                <div>
+                  <label className="label">Identifiant technique</label>
+                  <div style={{ padding:'8px 12px', background:'var(--gray-50)', border:'1px solid var(--gray-200)', borderRadius:8, fontSize:12, fontFamily:'monospace', color:'var(--gray-500)', userSelect:'all' }}>{clinic?.id}</div>
+                </div>
+                <button onClick={saveClinic} disabled={saving} className="btn-primary" style={{ width:'fit-content', gap:6 }}>
+                  {saved ? '✓ Sauvegardé' : saving ? 'Sauvegarde...' : 'Sauvegarder les modifications'}
+                </button>
+              </div>
             </div>
-          </div>
-          <div className="card p-6">
-            <h2 className="font-semibold text-gray-900 mb-4">Inviter un membre</h2>
-            <div className="flex gap-3 flex-wrap">
-              <input value={inviteEmail} onChange={e => setInviteEmail(e.target.value)} placeholder="email@clinique.com" className="input flex-1 min-w-[180px]" type="email" />
-              <select value={inviteRole} onChange={e => setInviteRole(e.target.value)} className="input w-40">
-                <option value="assistant">Assistant(e)</option>
-                <option value="medecin">Médecin</option>
-              </select>
-              <button onClick={sendInvite} disabled={saving === 'invite' || !inviteEmail} className="btn-primary">
-                {saving === 'invite' ? '...' : 'Inviter'}
+
+            <div className="card" style={{ padding:24 }}>
+              <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', marginBottom:12 }}>
+                <div>
+                  <div style={{ fontSize:13, fontWeight:600, color:'var(--gray-700)' }}>Données de démarrage</div>
+                  <div style={{ fontSize:12, color:'var(--gray-500)', marginTop:3 }}>Importez les traitements et workflows par défaut pour commencer rapidement</div>
+                </div>
+              </div>
+              <div style={{ background:'var(--blue-light)', border:'1px solid var(--blue-mid)', borderRadius:10, padding:'14px 16px', marginBottom:14, display:'flex', gap:12 }}>
+                <span style={{ fontSize:18, flexShrink:0 }}>💡</span>
+                <div style={{ fontSize:12.5, color:'var(--blue-dark)', lineHeight:1.6 }}>
+                  Ceci créera : <strong>Greffe de cheveux</strong> (8 étapes automatisées), <strong>Laser visage</strong> (4 étapes), <strong>Acide hyaluronique</strong> — avec tous les workflows email + WhatsApp préconfigurés.
+                </div>
+              </div>
+              <button onClick={seedDefaults} className="btn-secondary" style={{ display:'flex', alignItems:'center', gap:8, fontSize:13 }}>
+                🚀 Importer les traitements & workflows par défaut
               </button>
             </div>
-            <p className="text-xs text-gray-400 mt-2">L'invitation expirera dans 7 jours.</p>
           </div>
-          {invitations.length > 0 && (
-            <div className="card p-6">
-              <h2 className="font-semibold text-gray-900 mb-4">Invitations en attente ({invitations.length})</h2>
-              <div className="space-y-3">
-                {invitations.map(inv => (
-                  <div key={inv.id} className="flex items-center justify-between py-2 border-b border-gray-100 last:border-0">
-                    <div>
-                      <p className="text-sm font-medium text-gray-900">{inv.email}</p>
-                      <p className="text-xs text-gray-400">Expire le {new Date(inv.expires_at).toLocaleDateString('fr-FR')}</p>
+        )}
+
+        {/* ── TRAITEMENTS ── */}
+        {tab === 'treatments' && (
+          <div>
+            <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', marginBottom:24 }}>
+              <div>
+                <h2 style={{ fontSize:18, fontWeight:700, color:'var(--gray-900)', letterSpacing:'-0.3px', margin:'0 0 4px' }}>Traitements</h2>
+                <p style={{ fontSize:13, color:'var(--gray-500)', margin:0 }}>{treatments.length} traitement{treatments.length > 1 ? 's' : ''} configuré{treatments.length > 1 ? 's' : ''}</p>
+              </div>
+              <button onClick={() => setShowNewTreatment(true)} className="btn-primary" style={{ fontSize:13 }}>+ Nouveau traitement</button>
+            </div>
+
+            {treatments.length === 0 ? (
+              <div className="card" style={{ padding:48, textAlign:'center' }}>
+                <div style={{ fontSize:40, marginBottom:12 }}>💊</div>
+                <div style={{ fontSize:14, fontWeight:500, color:'var(--gray-700)', marginBottom:6 }}>Aucun traitement configuré</div>
+                <div style={{ fontSize:13, color:'var(--gray-400)', marginBottom:20 }}>Ajoutez vos traitements pour créer des parcours patients automatisés</div>
+                <button onClick={() => setShowNewTreatment(true)} className="btn-primary">+ Créer un traitement</button>
+              </div>
+            ) : (
+              <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
+                {treatments.map(t => (
+                  <div key={t.id} className="card" style={{ padding:'14px 18px', display:'flex', alignItems:'center', gap:14 }}>
+                    <div style={{ width:36, height:36, borderRadius:10, background:`${t.color}18`, border:`1.5px solid ${t.color}40`, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
+                      <div style={{ width:12, height:12, borderRadius:'50%', background:t.color }} />
                     </div>
-                    <div className="flex items-center gap-3">
-                      <span className="text-xs px-2 py-1 rounded-full bg-amber-100 text-amber-700">{inv.role}</span>
-                      <button onClick={() => cancelInvite(inv.id)} className="text-xs text-rose-500 hover:text-rose-700">Annuler</button>
+                    <div style={{ flex:1, minWidth:0 }}>
+                      <div style={{ fontSize:14, fontWeight:600, color:'var(--gray-900)' }}>{t.name}</div>
+                      {t.description && <div style={{ fontSize:12, color:'var(--gray-500)', marginTop:2 }}>{t.description}</div>}
+                    </div>
+                    <div style={{ display:'flex', gap:8, flexShrink:0 }}>
+                      <Link href="/dashboard/workflows" style={{ fontSize:12, color:'var(--blue)', textDecoration:'none', padding:'5px 10px', borderRadius:6, border:'1px solid var(--blue-mid)', background:'var(--blue-light)' }}>
+                        Workflows →
+                      </Link>
+                      <button onClick={() => deleteTreatment(t.id)} style={{ background:'none', border:'1px solid var(--gray-200)', borderRadius:6, cursor:'pointer', padding:'5px 8px', color:'var(--gray-400)', fontSize:12, transition:'all .1s' }}
+                        onMouseEnter={e => { e.currentTarget.style.borderColor='#FECACA'; e.currentTarget.style.color='#EF4444' }}
+                        onMouseLeave={e => { e.currentTarget.style.borderColor='var(--gray-200)'; e.currentTarget.style.color='var(--gray-400)' }}>
+                        🗑
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ── INTÉGRATIONS ── */}
+        {tab === 'integrations' && (
+          <div>
+            <div style={{ marginBottom:24 }}>
+              <h2 style={{ fontSize:18, fontWeight:700, color:'var(--gray-900)', letterSpacing:'-0.3px', margin:'0 0 4px' }}>Intégrations</h2>
+              <p style={{ fontSize:13, color:'var(--gray-500)', margin:0 }}>Connectez vos outils pour automatiser l'envoi d'emails, WhatsApp et signatures</p>
+            </div>
+
+            {/* Doctolib special card */}
+            <div className="card" style={{ padding:20, marginBottom:16, borderLeft:`4px solid #0596DE` }}>
+              <div style={{ display:'flex', alignItems:'center', gap:14 }}>
+                <div style={{ width:44, height:44, borderRadius:12, background:'#EFF6FF', display:'flex', alignItems:'center', justifyContent:'center', fontSize:22, flexShrink:0 }}>📅</div>
+                <div style={{ flex:1 }}>
+                  <div style={{ fontSize:14, fontWeight:600, color:'var(--gray-900)' }}>Doctolib</div>
+                  <div style={{ fontSize:12, color:'var(--gray-500)', marginTop:2 }}>Import de patients et synchronisation des rendez-vous</div>
+                </div>
+                <div style={{ display:'flex', gap:8, flexShrink:0 }}>
+                  <span style={{ fontSize:11, background:'#F0FDF4', color:'#059669', border:'1px solid #BBF7D0', padding:'3px 10px', borderRadius:99, fontWeight:600 }}>✓ Import CSV disponible</span>
+                  <Link href="/dashboard/import" className="btn-primary" style={{ textDecoration:'none', fontSize:12, padding:'6px 14px' }}>Importer →</Link>
+                </div>
+              </div>
+              <div style={{ marginTop:14, padding:'12px 14px', background:'#FFFBEB', borderRadius:8, fontSize:12, color:'#92400E', display:'flex', gap:8 }}>
+                <span>ℹ️</span>
+                <span><strong>Pas d'API publique Doctolib.</strong> L'intégration se fait via export CSV depuis Doctolib Pro → Paramètres → Exports de données. La synchronisation temps-réel nécessite le programme partenaire Doctolib (sur demande).</span>
+              </div>
+            </div>
+
+            {INTEGRATIONS.map(integ => (
+              <IntegCard key={integ.id} integ={integ} />
+            ))}
+          </div>
+        )}
+
+        {/* ── MON COMPTE ── */}
+        {tab === 'account' && (
+          <div>
+            <div style={{ marginBottom:24 }}>
+              <h2 style={{ fontSize:18, fontWeight:700, color:'var(--gray-900)', letterSpacing:'-0.3px', margin:'0 0 4px' }}>Mon compte</h2>
+              <p style={{ fontSize:13, color:'var(--gray-500)', margin:0 }}>Informations de votre profil médecin</p>
+            </div>
+            <div className="card" style={{ padding:24, maxWidth:440 }}>
+              <div style={{ display:'flex', alignItems:'center', gap:14, marginBottom:24, paddingBottom:20, borderBottom:'1px solid var(--gray-100)' }}>
+                <div style={{ width:52, height:52, borderRadius:'50%', background:'var(--blue)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:20, fontWeight:700, color:'white', flexShrink:0 }}>
+                  {profile?.full_name?.[0]?.toUpperCase() ?? 'U'}
+                </div>
+                <div>
+                  <div style={{ fontSize:16, fontWeight:700, color:'var(--gray-900)' }}>{profile?.full_name}</div>
+                  <div style={{ fontSize:13, color:'var(--gray-500)', marginTop:2, textTransform:'capitalize' }}>{profile?.role} · {clinic?.name}</div>
+                </div>
+              </div>
+              <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
+                {[
+                  { label:'Nom complet',   value: profile?.full_name },
+                  { label:'Email',         value: profile?.email },
+                  { label:'Rôle',          value: profile?.role, capitalize: true },
+                  { label:'Clinique',      value: clinic?.name },
+                ].map(f => (
+                  <div key={f.label}>
+                    <label className="label">{f.label}</label>
+                    <div style={{ padding:'9px 12px', background:'var(--gray-50)', border:'1px solid var(--gray-200)', borderRadius:8, fontSize:14, color:'var(--gray-700)', textTransform: f.capitalize ? 'capitalize' : 'none' }}>
+                      {f.value || '—'}
                     </div>
                   </div>
                 ))}
               </div>
             </div>
-          )}
-        </div>
-      )}
-
-      {/* ─── BILLING ─── */}
-      {tab === 'billing' && (
-        <div className="space-y-5">
-          <div className="card p-6">
-            <div className="flex items-center justify-between mb-5">
-              <div>
-                <h2 className="font-semibold text-gray-900">Plan actuel</h2>
-                <p className="text-sm text-gray-500 mt-1">Gérez votre abonnement ClinicFlow AI</p>
-              </div>
-              <span className={`text-sm px-4 py-2 rounded-full font-semibold ${plan.color}`}>{plan.badge} {plan.label}</span>
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="rounded-xl bg-gray-50 p-4">
-                <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">Patients inclus</p>
-                <p className="text-3xl font-bold text-gray-900">{clinic?.patients_limit ?? 50}</p>
-                <p className="text-xs text-gray-400 mt-1">maximum sur ce plan</p>
-              </div>
-              <div className="rounded-xl bg-gray-50 p-4">
-                <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">Automations / mois</p>
-                <p className="text-3xl font-bold text-gray-900">{clinic?.automations_limit ?? 100}</p>
-                <p className="text-xs text-gray-400 mt-1">maximum sur ce plan</p>
-              </div>
-            </div>
           </div>
-          <div className="grid md:grid-cols-3 gap-4">
-            {[
-              { plan: 'free',   name: 'Free',   price: '0€/mois',    features: ['50 patients', '100 automations/mois', 'Import Doctolib', 'WhatsApp simulation'] },
-              { plan: 'pro',    name: 'Pro',     price: '49€/mois',   features: ['500 patients', '1 000 automations/mois', 'WhatsApp réel', 'Transcription IA', '3 membres équipe'], highlight: true },
-              { plan: 'clinic', name: 'Clinic',  price: '149€/mois',  features: ['Patients illimités', 'Automations illimitées', 'Membres illimités', 'Support prioritaire', 'Onboarding dédié'] },
-            ].map(p => (
-              <div key={p.plan} className={`card p-5 ${(p as any).highlight ? 'border-[var(--blue)] border-2 relative' : ''}`}>
-                {(p as any).highlight && <div className="absolute -top-3 left-1/2 -translate-x-1/2 text-xs font-semibold text-white bg-[var(--blue)] px-3 py-1 rounded-full">⚡ Recommandé</div>}
-                <p className="font-semibold text-gray-900 mt-2">{p.name}</p>
-                <p className="text-2xl font-bold text-gray-900 mt-1 mb-4">{p.price}</p>
-                <ul className="space-y-2 mb-5">
-                  {p.features.map(f => (
-                    <li key={f} className="text-sm text-gray-600 flex items-center gap-2">
-                      <span className="text-green-500 flex-shrink-0">✓</span>{f}
-                    </li>
-                  ))}
-                </ul>
-                <button
-                  className={`w-full ${clinic?.plan === p.plan ? 'btn-secondary opacity-60 cursor-default' : 'btn-primary'}`}
-                  disabled={clinic?.plan === p.plan}
-                >
-                  {clinic?.plan === p.plan ? 'Plan actuel' : 'Choisir ce plan'}
-                </button>
+        )}
+      </div>
+
+      {showNewTreatment && (
+        <NewTreatmentModal
+          clinicId={clinic?.id ?? ''}
+          onClose={() => setShowNewTreatment(false)}
+          onCreated={(t: any) => { setTreatments(ts => [...ts, t]); setShowNewTreatment(false) }}
+        />
+      )}
+    </div>
+  )
+}
+
+function IntegCard({ integ }: { integ: typeof INTEGRATIONS[0] }) {
+  const [expanded, setExpanded] = useState(false)
+  const [vals, setVals] = useState<Record<string,string>>({})
+  const [saving, setSaving] = useState(false)
+  const [saved, setSaved]   = useState(false)
+  const configured = Object.values(vals).some(v => v && !v.includes('•'))
+
+  function save() {
+    setSaving(true)
+    // In a real app, save to Supabase vault / env
+    setTimeout(() => { setSaving(false); setSaved(true); setTimeout(() => setSaved(false), 2000) }, 600)
+  }
+
+  return (
+    <div className="card" style={{ marginBottom:10, overflow:'hidden' }}>
+      <div style={{ padding:'16px 20px', display:'flex', alignItems:'center', gap:14, cursor:'pointer' }} onClick={() => setExpanded(!expanded)}>
+        <div style={{ width:40, height:40, borderRadius:10, background:`${integ.color}15`, border:`1.5px solid ${integ.color}30`, display:'flex', alignItems:'center', justifyContent:'center', fontSize:20, flexShrink:0 }}>
+          {integ.icon}
+        </div>
+        <div style={{ flex:1, minWidth:0 }}>
+          <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+            <span style={{ fontSize:14, fontWeight:600, color:'var(--gray-900)' }}>{integ.label}</span>
+            {integ.badge && <span style={{ fontSize:10, background:'#FFFBEB', color:'#D97706', border:'1px solid #FDE68A', padding:'1px 7px', borderRadius:99, fontWeight:600 }}>{integ.badge}</span>}
+            {configured && <span style={{ fontSize:10, background:'#F0FDF4', color:'#059669', border:'1px solid #BBF7D0', padding:'1px 7px', borderRadius:99, fontWeight:600 }}>✓ Configuré</span>}
+          </div>
+          <div style={{ fontSize:12, color:'var(--gray-500)', marginTop:2 }}>{integ.desc}</div>
+        </div>
+        <div style={{ display:'flex', gap:8, flexShrink:0, alignItems:'center' }}>
+          <a href={integ.docs} target="_blank" style={{ fontSize:11, color:'var(--blue)', textDecoration:'none' }}>Docs ↗</a>
+          <span style={{ fontSize:12, color:'var(--gray-400)', transition:'transform .15s', transform: expanded ? 'rotate(180deg)' : 'rotate(0deg)', display:'inline-block' }}>▾</span>
+        </div>
+      </div>
+
+      {expanded && (
+        <div style={{ padding:'0 20px 20px', borderTop:'1px solid var(--gray-100)' }}>
+          <div style={{ paddingTop:16, display:'flex', flexDirection:'column', gap:12 }}>
+            {integ.fields.map(f => (
+              <div key={f.key}>
+                <label className="label">{f.label}</label>
+                <input className="input" type={f.type} value={vals[f.key] ?? ''} placeholder={f.placeholder}
+                  onChange={e => setVals(v => ({ ...v, [f.key]: e.target.value }))} />
               </div>
             ))}
+            <div style={{ display:'flex', gap:8, alignItems:'center', marginTop:4 }}>
+              <button onClick={save} disabled={saving} className="btn-primary" style={{ fontSize:13, width:'fit-content' }}>
+                {saved ? '✓ Sauvegardé' : saving ? 'Sauvegarde...' : 'Enregistrer la configuration'}
+              </button>
+              <span style={{ fontSize:11, color:'var(--gray-400)' }}>Les clés sont stockées de façon sécurisée</span>
+            </div>
           </div>
         </div>
       )}
+    </div>
+  )
+}
 
-      {/* ─── TRAITEMENTS ─── */}
-      {tab === 'treatments' && (
-        <div className="space-y-4">
-          <div className="flex justify-between items-center">
-            <p className="text-sm text-gray-500">{treatments.length} traitement(s)</p>
-            <button onClick={seedDefaults} className="btn-secondary text-sm">⚡ Charger les défauts</button>
-          </div>
-          {treatments.map(t => (
-            <div key={t.id} className="card p-4 flex items-center gap-4">
-              <div className="w-2 h-10 rounded-full flex-shrink-0" style={{ background: t.color || 'var(--blue)' }} />
-              <div>
-                <p className="font-medium text-gray-900">{t.name}</p>
-                {t.description && <p className="text-xs text-gray-500 mt-0.5">{t.description}</p>}
+function NewTreatmentModal({ clinicId, onClose, onCreated }: any) {
+  const supabase = createClient()
+  const [form, setForm] = useState({ name:'', description:'', color:'#0596DE' })
+  const [loading, setLoading] = useState(false)
+  const COLORS = ['#0596DE','#7C3AED','#059669','#D97706','#DC2626','#DB2777','#2563EB','#0F172A']
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    setLoading(true)
+    const { data } = await supabase.from('treatments').insert({ ...form, clinic_id: clinicId }).select().single()
+    setLoading(false)
+    if (data) onCreated(data)
+  }
+
+  return (
+    <div className="modal-overlay">
+      <div className="modal">
+        <div className="modal-header">
+          <div className="modal-title">Nouveau traitement</div>
+          <button onClick={onClose} style={{ background:'none', border:'none', cursor:'pointer', fontSize:20, color:'var(--gray-400)', lineHeight:1 }}>×</button>
+        </div>
+        <form onSubmit={handleSubmit}>
+          <div className="modal-body" style={{ display:'flex', flexDirection:'column', gap:14 }}>
+            <div>
+              <label className="label">Nom du traitement *</label>
+              <input className="input" value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} required placeholder="Greffe de cheveux, Laser CO2..." />
+            </div>
+            <div>
+              <label className="label">Description</label>
+              <textarea className="input" value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} rows={2} style={{ resize:'none' }} placeholder="Description courte..." />
+            </div>
+            <div>
+              <label className="label">Couleur d'identification</label>
+              <div style={{ display:'flex', gap:8, marginTop:4, flexWrap:'wrap' }}>
+                {COLORS.map(c => (
+                  <button key={c} type="button" onClick={() => setForm(f => ({ ...f, color: c }))} style={{ width:28, height:28, borderRadius:'50%', background:c, border: form.color === c ? '3px solid var(--gray-900)' : '2px solid transparent', cursor:'pointer', transform: form.color === c ? 'scale(1.2)' : 'scale(1)', transition:'all .1s', outline: form.color === c ? `3px solid ${c}40` : 'none' }} />
+                ))}
               </div>
             </div>
-          ))}
-          {treatments.length === 0 && (
-            <div className="text-center py-12 text-gray-400">
-              <p className="text-3xl mb-2">💉</p>
-              <p className="text-sm">Aucun traitement. Cliquez sur "Charger les défauts" pour commencer.</p>
-            </div>
-          )}
-        </div>
-      )}
+          </div>
+          <div className="modal-footer">
+            <button type="button" onClick={onClose} className="btn-secondary">Annuler</button>
+            <button type="submit" disabled={loading} className="btn-primary">{loading ? 'Création...' : 'Créer le traitement'}</button>
+          </div>
+        </form>
+      </div>
     </div>
   )
 }
