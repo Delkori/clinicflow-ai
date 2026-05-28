@@ -35,8 +35,11 @@ export default function PatientsPage() {
           <div className="page-subtitle">{total} patient{total > 1 ? 's' : ''} enregistré{total > 1 ? 's' : ''}</div>
         </div>
         <div style={{ display:'flex', gap:8 }}>
+          <Link href="/dashboard/patients/doctolib" className="btn-secondary" style={{ textDecoration:'none', fontSize:13, display:'flex', alignItems:'center', gap:6 }}>
+            📅 Patients Doctolib
+          </Link>
           <Link href="/dashboard/import" className="btn-secondary" style={{ textDecoration:'none', fontSize:13, display:'flex', alignItems:'center', gap:6 }}>
-            📅 Import Doctolib
+            📄 Import CSV
           </Link>
           <button onClick={() => setShowModal(true)} className="btn-primary" style={{ fontSize:13 }}>
             + Nouveau patient
