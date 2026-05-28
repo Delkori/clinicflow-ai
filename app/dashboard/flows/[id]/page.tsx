@@ -235,6 +235,8 @@ export default function FlowBuilderPage() {
   const [appConnections, setAppConnections] = useState<any[]>([])
   const [zoom, setZoom] = useState(1)
   const [pan, setPan]   = useState({ x:0, y:0 })
+  const [isPanning, setIsPanning] = useState(false)
+  const panStart = useRef<{x:number;y:number;px:number;py:number}|null>(null)
 
   useEffect(() => {
     async function load() {
@@ -358,13 +360,41 @@ export default function FlowBuilderPage() {
 
       <div style={{ flex:1, display:'flex', overflow:'hidden' }}>
         {/* Canvas */}
-        <div ref={canvasRef} style={{ flex:1, position:'relative', overflow:'hidden', cursor: connectFrom ? 'crosshair' : 'default' }}
+        <div ref={canvasRef}
+          style={{ flex:1, position:'relative', overflow:'hidden', cursor: isPanning ? 'grabbing' : connectFrom ? 'crosshair' : 'grab' }}
+          onMouseDown={e => {
+            // Middle click OR left click on background (not on a node)
+            const target = e.target as HTMLElement
+            const onBackground = target === canvasRef.current || target.classList.contains('canvas-bg')
+            if (e.button === 1 || (e.button === 0 && onBackground && !connectFrom)) {
+              e.preventDefault()
+              setIsPanning(true)
+              panStart.current = { x: e.clientX, y: e.clientY, px: pan.x, py: pan.y }
+            }
+          }}
+          onMouseMove={e => {
+            if (!isPanning || !panStart.current) return
+            const dx = e.clientX - panStart.current.x
+            const dy = e.clientY - panStart.current.y
+            setPan({ x: panStart.current.px + dx, y: panStart.current.py + dy })
+          }}
+          onMouseUp={e => {
+            if (isPanning) { setIsPanning(false); panStart.current = null; return }
+            if (connectFrom) { setConnectFrom(null); return }
+          }}
+          onMouseLeave={() => { setIsPanning(false); panStart.current = null }}
+          onWheel={e => {
+            e.preventDefault()
+            const delta = e.deltaY > 0 ? -0.08 : 0.08
+            setZoom(z => Math.min(2, Math.max(0.3, z + delta)))
+          }}
           onClick={e => {
+            if (isPanning) return
             if (connectFrom) { setConnectFrom(null); return }
             if ((e.target as HTMLElement) === canvasRef.current) { setSelectedId(null) }
           }}>
           {/* Grid background */}
-          <div style={{ position:'absolute', inset:0, backgroundImage:'radial-gradient(circle, #CBD5E1 1px, transparent 1px)', backgroundSize:'24px 24px', opacity:.4 }} />
+          <div className='canvas-bg' style={{ position:'absolute', inset:0, backgroundImage:'radial-gradient(circle, #CBD5E1 1px, transparent 1px)', backgroundSize:'24px 24px', opacity:.4 }} />
 
           {/* SVG edges */}
           <svg style={{ position:'absolute', inset:0, width:'100%', height:'100%', pointerEvents:'none', overflow:'visible' }}>
