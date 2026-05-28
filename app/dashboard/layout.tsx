@@ -14,6 +14,7 @@ const NAV_MAIN = [
 ]
 const NAV_TOOLS = [
   { href:'/dashboard/flows',         label:'Workflows',      icon:'⚡' },
+  { href:'/dashboard/flows/runs',      label:'Exécutions',     icon:'📋' },
   { href:'/dashboard/automations',   label:'Logs auto.',     icon:'📋' },
   { href:'/dashboard/integrations',  label:'Intégrations',   icon:'🔌' },
   { href:'/dashboard/team',          label:'Équipe',         icon:'👥' },
@@ -24,9 +25,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const pathname = usePathname()
   const router   = useRouter()
   const supabase = createClient()
-  const [profile, setProfile] = useState<any>(null)
-  const [clinic,  setClinic]  = useState<any>(null)
-  const [col, setCol]         = useState(false)
+  const [profile, setProfile]     = useState<any>(null)
+  const [clinic,  setClinic]      = useState<any>(null)
+  const [col, setCol]             = useState(false)
+  const [unreadCount, setUnreadCount] = useState(0)
+  const [showNotifs, setShowNotifs]   = useState(false)
+  const [notifs, setNotifs]           = useState<any[]>([])
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data:{user} }) => {
@@ -34,7 +38,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       supabase.from('profiles').select('*').eq('id', user.id).single().then(({ data }) => {
         if (!data) return
         setProfile(data)
-        supabase.from('clinics').select('*').eq('id', data.clinic_id).single().then(({ data:c }) => setClinic(c))
+        supabase.from('clinics').select('*').eq('id', data.clinic_id).single().then(({ data:c }) => {
+          setClinic(c)
+          if (c) {
+            supabase.from('notifications').select('*', { count:'exact', head:true }).eq('clinic_id', c.id).eq('is_read', false).then(({ count }) => setUnreadCount(count ?? 0))
+          }
+        })
       })
     })
   }, [])
@@ -95,6 +104,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
         {/* Bottom */}
         <div style={{ borderTop:'1px solid rgba(255,255,255,0.07)', padding:8 }}>
+          <NavLink href="/dashboard/onboarding" label="Démarrage" icon="🚀" />
           <NavLink href="/dashboard/settings" label="Paramètres" icon="⚙" />
           <div style={{ display:'flex', alignItems:'center', gap:9, padding:'8px 10px', marginTop:4 }}>
             <div style={{ width:28, height:28, borderRadius:'50%', background:'var(--blue)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:11, fontWeight:700, color:'white', flexShrink:0 }}>
@@ -114,8 +124,50 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         </div>
       </aside>
 
-      <main style={{ flex:1, overflow:'auto', display:'flex', flexDirection:'column' }}>
-        {children}
+      <main style={{ flex:1, overflow:'hidden', display:'flex', flexDirection:'column', position:'relative' }}>
+        {/* Notification bell */}
+        <div style={{ position:'absolute', top:16, right:24, zIndex:20 }}>
+          <button onClick={() => {
+            setShowNotifs(!showNotifs)
+            if (!showNotifs && clinic?.id) {
+              supabase.from('notifications').select('*, patient:patients(first_name, last_name)').eq('clinic_id', clinic.id).order('created_at', { ascending:false }).limit(15).then(({ data }) => setNotifs(data ?? []))
+            }
+          }} style={{ position:'relative', width:34, height:34, borderRadius:9, border:'1px solid var(--gray-200)', background:'white', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', fontSize:15, boxShadow:'0 1px 3px rgba(0,0,0,.05)' }}>
+            🔔
+            {unreadCount > 0 && <span style={{ position:'absolute', top:-4, right:-4, width:17, height:17, borderRadius:'50%', background:'#EF4444', color:'white', fontSize:9, fontWeight:700, display:'flex', alignItems:'center', justifyContent:'center' }}>{unreadCount > 9 ? '9+' : unreadCount}</span>}
+          </button>
+          {showNotifs && (
+            <div style={{ position:'absolute', top:42, right:0, width:320, background:'white', borderRadius:12, border:'1px solid var(--gray-200)', boxShadow:'0 8px 32px rgba(0,0,0,.12)', overflow:'hidden', zIndex:100 }}>
+              <div style={{ padding:'12px 14px', borderBottom:'1px solid var(--gray-100)', display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+                <div style={{ fontSize:13, fontWeight:600, color:'var(--gray-900)' }}>Notifications {unreadCount > 0 && <span style={{ fontSize:11, background:'#EF4444', color:'white', borderRadius:99, padding:'1px 7px', marginLeft:4 }}>{unreadCount}</span>}</div>
+                {unreadCount > 0 && <button onClick={async () => { if (clinic?.id) { await supabase.from('notifications').update({ is_read: true }).eq('clinic_id', clinic.id).eq('is_read', false); setUnreadCount(0); setNotifs(n => n.map(x => ({ ...x, is_read: true }))) } }} style={{ fontSize:11, color:'var(--blue)', background:'none', border:'none', cursor:'pointer' }}>Tout marquer lu</button>}
+              </div>
+              <div style={{ maxHeight:360, overflowY:'auto' }}>
+                {notifs.length === 0 ? (
+                  <div style={{ padding:24, textAlign:'center', color:'var(--gray-400)', fontSize:13 }}>
+                    <div style={{ fontSize:28, marginBottom:8 }}>🔔</div>
+                    Aucune notification
+                  </div>
+                ) : notifs.map(n => (
+                  <div key={n.id} onClick={async () => { if (!n.is_read) { await supabase.from('notifications').update({ is_read: true }).eq('id', n.id); setUnreadCount(c => Math.max(0, c-1)); setNotifs(prev => prev.map(x => x.id === n.id ? { ...x, is_read: true } : x)) }; if (n.link) window.location.href = n.link; else setShowNotifs(false) }}
+                    style={{ padding:'10px 14px', borderBottom:'1px solid var(--gray-50)', cursor:'pointer', background: n.is_read ? 'white' : 'var(--blue-light)', display:'flex', gap:10, alignItems:'flex-start', transition:'background .1s' }}
+                    onMouseEnter={e => e.currentTarget.style.background = n.is_read ? 'var(--gray-50)' : '#DBEAFE'}
+                    onMouseLeave={e => e.currentTarget.style.background = n.is_read ? 'white' : 'var(--blue-light)'}>
+                    <span style={{ fontSize:18, flexShrink:0 }}>{n.type === 'booking_request'?'📅':n.type === 'document_unsigned'?'✍️':n.type === 'workflow_failed'?'❌':'🔔'}</span>
+                    <div style={{ flex:1, minWidth:0 }}>
+                      <div style={{ fontSize:12.5, fontWeight: n.is_read ? 400 : 600, color:'var(--gray-900)', marginBottom:2 }}>{n.title}</div>
+                      {n.message && <div style={{ fontSize:11, color:'var(--gray-500)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{n.message}</div>}
+                    </div>
+                    {!n.is_read && <div style={{ width:7, height:7, borderRadius:'50%', background:'var(--blue)', flexShrink:0, marginTop:5 }} />}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+        <div style={{ flex:1, overflow:'auto', display:'flex', flexDirection:'column' }}>
+          {children}
+        </div>
       </main>
     </div>
   )

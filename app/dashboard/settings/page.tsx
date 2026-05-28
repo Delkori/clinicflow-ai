@@ -243,6 +243,11 @@ export default function SettingsPage() {
           </div>
         )}
 
+        {/* ── DOCTOLIB iCAL ── */}
+        {tab === 'doctolib' && (
+          <DoctoLibSection clinicId={clinic?.id ?? ''} />
+        )}
+
         {/* ── INTÉGRATIONS ── */}
         {tab === 'integrations' && (
           <div>
@@ -426,6 +431,167 @@ function NewTreatmentModal({ clinicId, onClose, onCreated }: any) {
           </div>
         </form>
       </div>
+    </div>
+  )
+}
+
+// ── Doctolib iCal Section ─────────────────────────────────────────────────
+function DoctoLibSection({ clinicId }: { clinicId: string }) {
+  const supabase = createClient()
+  const [sources, setSources] = useState<any[]>([])
+  const [newUrl, setNewUrl]   = useState('')
+  const [newName, setNewName] = useState('Doctolib')
+  const [syncing, setSyncing] = useState<string|null>(null)
+  const [testing, setTesting] = useState(false)
+  const [testResult, setTestResult] = useState<any>(null)
+  const [adding, setAdding]   = useState(false)
+  const [toast, setToast]     = useState<any>(null)
+
+  useEffect(() => {
+    supabase.from('ical_sources').select('*').eq('clinic_id', clinicId).then(({ data }) => setSources(data ?? []))
+  }, [clinicId])
+
+  function showToast(msg: string, ok = true) {
+    setToast({ msg, ok })
+    setTimeout(() => setToast(null), 3500)
+  }
+
+  async function testUrl() {
+    if (!newUrl) return
+    setTesting(true); setTestResult(null)
+    const res = await fetch(`/api/ical/sync?url=${encodeURIComponent(newUrl)}`)
+    const data = await res.json()
+    setTestResult(data)
+    setTesting(false)
+  }
+
+  async function addSource() {
+    if (!newUrl || !clinicId) return
+    setAdding(true)
+    const { data } = await supabase.from('ical_sources').insert({ clinic_id: clinicId, name: newName, url: newUrl }).select().single()
+    if (data) { setSources(prev => [...prev, data]); setNewUrl(''); setTestResult(null) }
+    setAdding(false)
+    showToast('Flux iCal ajouté ✓')
+  }
+
+  async function syncSource(source: any) {
+    setSyncing(source.id)
+    const res = await fetch('/api/ical/sync', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ source_id: source.id, clinic_id: clinicId }),
+    })
+    const data = await res.json()
+    setSyncing(null)
+    if (data.success) {
+      showToast(`✓ ${data.created} RDV créés · ${data.patient_created} nouveaux patients`)
+      setSources(prev => prev.map(s => s.id === source.id ? { ...s, last_synced_at: new Date().toISOString(), sync_count: (s.sync_count||0) + data.created } : s))
+    } else {
+      showToast(`Erreur : ${data.error}`, false)
+    }
+  }
+
+  async function deleteSource(id: string) {
+    await supabase.from('ical_sources').delete().eq('id', id)
+    setSources(prev => prev.filter(s => s.id !== id))
+  }
+
+  return (
+    <div>
+      {toast && (
+        <div style={{ position:'fixed', bottom:24, right:24, zIndex:999, background: toast.ok ? '#022C22' : '#450A0A', color:'white', padding:'12px 18px', borderRadius:10, fontSize:13, fontWeight:500, boxShadow:'0 8px 24px rgba(0,0,0,.25)' }}>
+          {toast.msg}
+        </div>
+      )}
+      <div style={{ marginBottom:24 }}>
+        <h2 style={{ fontSize:18, fontWeight:700, color:'var(--gray-900)', letterSpacing:'-0.3px', margin:'0 0 4px' }}>Synchronisation Doctolib</h2>
+        <p style={{ fontSize:13, color:'var(--gray-500)', margin:0 }}>Importez vos RDV Doctolib et créez automatiquement les fiches patients</p>
+      </div>
+
+      {/* Explainer */}
+      <div className="card" style={{ padding:20, marginBottom:16, borderLeft:'4px solid var(--blue)' }}>
+        <div style={{ fontSize:13, fontWeight:600, color:'var(--gray-800)', marginBottom:10 }}>Comment récupérer votre flux iCal Doctolib</div>
+        <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
+          {[
+            'Connectez-vous à Doctolib Pro',
+            'Allez dans Agenda → Paramètres → Synchronisation calendrier',
+            'Copiez l\'URL du flux iCal généré',
+            'Collez-la ci-dessous',
+          ].map((step, i) => (
+            <div key={i} style={{ display:'flex', gap:10, alignItems:'flex-start' }}>
+              <div style={{ width:20, height:20, borderRadius:'50%', background:'var(--blue)', color:'white', fontSize:10, fontWeight:700, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0, marginTop:1 }}>{i+1}</div>
+              <span style={{ fontSize:13, color:'var(--gray-600)' }}>{step}</span>
+            </div>
+          ))}
+        </div>
+        <div style={{ marginTop:12, padding:'10px 12px', background:'#FFFBEB', border:'1px solid #FDE68A', borderRadius:8, fontSize:12, color:'#92400E', display:'flex', gap:8 }}>
+          <span>ℹ️</span>
+          <span>Le flux iCal est disponible aussi depuis Google Calendar, Outlook, ou tout autre agenda. Format : <code>webcal://...</code> ou <code>https://...</code></span>
+        </div>
+      </div>
+
+      {/* Add source form */}
+      <div className="card" style={{ padding:20, marginBottom:16 }}>
+        <div style={{ fontSize:13, fontWeight:600, color:'var(--gray-700)', marginBottom:14 }}>Ajouter un flux iCal</div>
+        <div style={{ display:'flex', flexDirection:'column', gap:12 }}>
+          <div>
+            <label className="label">Nom du calendrier</label>
+            <input className="input" value={newName} onChange={e => setNewName(e.target.value)} placeholder="Doctolib, Google Calendar..." />
+          </div>
+          <div>
+            <label className="label">URL du flux iCal *</label>
+            <div style={{ display:'flex', gap:8 }}>
+              <input className="input" value={newUrl} onChange={e => { setNewUrl(e.target.value); setTestResult(null) }} placeholder="https://www.doctolib.fr/ics/..." style={{ flex:1 }} />
+              <button onClick={testUrl} disabled={!newUrl || testing}
+                style={{ fontSize:12, padding:'8px 14px', borderRadius:8, border:'1px solid var(--gray-200)', background:'white', cursor:'pointer', color:'var(--gray-700)', flexShrink:0, whiteSpace:'nowrap' }}>
+                {testing ? '...' : '🧪 Tester'}
+              </button>
+            </div>
+          </div>
+          {testResult && (
+            <div style={{ padding:'10px 12px', background: testResult.valid ? '#F0FDF4' : '#FEF2F2', border:`1px solid ${testResult.valid ? '#BBF7D0' : '#FECACA'}`, borderRadius:8, fontSize:12, color: testResult.valid ? '#059669' : '#DC2626' }}>
+              {testResult.valid
+                ? `✅ Flux valide — ${testResult.event_count} événement${testResult.event_count > 1 ? 's' : ''} détecté${testResult.event_count > 1 ? 's' : ''}`
+                : `❌ Flux invalide : ${testResult.error}`}
+            </div>
+          )}
+          <button onClick={addSource} disabled={adding || !newUrl || (testResult && !testResult.valid)} className="btn-primary" style={{ width:'fit-content', fontSize:13 }}>
+            {adding ? 'Ajout...' : '+ Ajouter ce flux'}
+          </button>
+        </div>
+      </div>
+
+      {/* Sources list */}
+      {sources.length > 0 && (
+        <div>
+          <div style={{ fontSize:13, fontWeight:600, color:'var(--gray-700)', marginBottom:10 }}>Flux configurés ({sources.length})</div>
+          <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
+            {sources.map(s => (
+              <div key={s.id} className="card" style={{ padding:'14px 18px', display:'flex', alignItems:'center', gap:14 }}>
+                <div style={{ width:36, height:36, borderRadius:9, background:'var(--blue-light)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:18, flexShrink:0 }}>📅</div>
+                <div style={{ flex:1, minWidth:0 }}>
+                  <div style={{ fontSize:13.5, fontWeight:600, color:'var(--gray-900)' }}>{s.name}</div>
+                  <div style={{ fontSize:11, color:'var(--gray-400)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', marginTop:2 }}>{s.url}</div>
+                  <div style={{ fontSize:11, color:'var(--gray-400)', marginTop:2, display:'flex', gap:10 }}>
+                    {s.last_synced_at && <span>Dernière sync : {new Date(s.last_synced_at).toLocaleString('fr-FR')}</span>}
+                    {s.sync_count > 0 && <span>· {s.sync_count} événements importés</span>}
+                  </div>
+                </div>
+                <div style={{ display:'flex', gap:6, flexShrink:0 }}>
+                  <button onClick={() => syncSource(s)} disabled={syncing === s.id}
+                    style={{ fontSize:12, padding:'7px 14px', borderRadius:7, border:'none', background:'var(--blue)', color:'white', cursor:'pointer', fontWeight:600, display:'flex', gap:6, alignItems:'center' }}>
+                    {syncing === s.id ? <><div style={{ width:12, height:12, border:'2px solid rgba(255,255,255,.3)', borderTopColor:'white', borderRadius:'50%', animation:'spin .7s linear infinite' }} />Sync...</> : '🔄 Synchroniser'}
+                    <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
+                  </button>
+                  <button onClick={() => deleteSource(s.id)} style={{ fontSize:12, padding:'7px 8px', borderRadius:7, border:'1px solid var(--gray-200)', background:'white', cursor:'pointer', color:'var(--gray-400)' }}
+                    onMouseEnter={e => { e.currentTarget.style.borderColor='#FECACA'; e.currentTarget.style.color='#EF4444' }}
+                    onMouseLeave={e => { e.currentTarget.style.borderColor='var(--gray-200)'; e.currentTarget.style.color='var(--gray-400)' }}>🗑</button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   )
 }
