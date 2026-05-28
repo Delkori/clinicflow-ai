@@ -45,7 +45,22 @@ export default function DashboardPage() {
         trend.push({ day: ['D','L','M','M','J','V','S'][d.getDay()], v: count ?? 0 })
       }
 
-      setData({ todayAppts: todayAppts ?? [], monthPatients, monthConsults, pendingActions, recentPatients: recentPatients ?? [], pendingExec: pendingExec ?? [], activeJourneys: activeJourneys ?? [], trend })
+      // Compute loyalty scores for recent patients
+      const recentWithScores = await Promise.all((recentPatients ?? []).map(async (p: any) => {
+        const [{ count: consultCount }, { count: docCount }] = await Promise.all([
+          supabase.from('consultations').select('*', { count:'exact', head:true }).eq('patient_id', p.id),
+          supabase.from('generated_documents').select('*', { count:'exact', head:true }).eq('patient_id', p.id),
+        ])
+        const daysSince = Math.floor((Date.now() - new Date(p.created_at).getTime()) / 86400000)
+        const score = Math.min(100, Math.round(
+          (consultCount ?? 0) * 25 +
+          (docCount ?? 0) * 10 +
+          (daysSince < 30 ? 20 : daysSince < 90 ? 10 : 0)
+        ))
+        return { ...p, loyaltyScore: score, consultCount: consultCount ?? 0 }
+      }))
+
+      setData({ todayAppts: todayAppts ?? [], monthPatients, monthConsults, pendingActions, recentPatients: recentWithScores, pendingExec: pendingExec ?? [], activeJourneys: activeJourneys ?? [], trend })
       setLoading(false)
     }
     load()
@@ -204,7 +219,12 @@ export default function DashboardPage() {
                     <div style={{ fontSize:'13px', fontWeight:'500', color:'var(--gray-900)' }}>{p.first_name} {p.last_name}</div>
                     <div style={{ fontSize:'11px', color:'var(--gray-500)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{p.email || p.phone || '—'}</div>
                   </div>
-                  <div style={{ fontSize:'11px', color:'var(--gray-400)', flexShrink:0 }}>{formatDate(p.created_at)}</div>
+                  <div style={{ flexShrink:0, display:'flex', alignItems:'center', gap:6 }}>
+                    <div style={{ fontSize:10, fontWeight:700, color: p.loyaltyScore >= 60 ? '#059669' : p.loyaltyScore >= 30 ? '#D97706' : '#94A3B8', background: p.loyaltyScore >= 60 ? '#F0FDF4' : p.loyaltyScore >= 30 ? '#FFFBEB' : 'var(--gray-100)', padding:'1px 7px', borderRadius:99 }}>
+                      {p.loyaltyScore ?? 0}pts
+                    </div>
+                    <div style={{ fontSize:'11px', color:'var(--gray-400)' }}>{formatDate(p.created_at)}</div>
+                  </div>
                 </Link>
               ))}
             </div>

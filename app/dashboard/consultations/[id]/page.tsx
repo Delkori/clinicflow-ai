@@ -57,6 +57,25 @@ export default function ConsultationDetailPage() {
     showToast('Consultation validée ✓')
   }
 
+  const [reportGenerating, setReportGenerating] = useState(false)
+  const [reportHtml, setReportHtml] = useState<string|null>(null)
+
+  async function generateAiReport() {
+    setReportGenerating(true)
+    const res = await fetch('/api/ai/generate-report', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ consultation_id: id }),
+    })
+    const data = await res.json()
+    if (data.success) {
+      setReportHtml(data.report)
+      setConsultation((c: any) => ({ ...c, structured_data: { ...(c?.structured_data ?? {}), compte_rendu_ia: data.report } }))
+      showToast(data.simulated ? '✓ CR généré (démo)' : '✓ Compte-rendu généré par IA')
+    }
+    setReportGenerating(false)
+  }
+
   async function sendReportEmail() {
     if (!consultation?.patient?.email) return showToast("Ce patient n'a pas d'email", 'error')
     setEmailSending(true)
@@ -138,6 +157,12 @@ export default function ConsultationDetailPage() {
 
           {/* Actions */}
           <div style={{ display:'flex', gap:8, flexShrink:0 }}>
+            <button onClick={generateAiReport} disabled={reportGenerating} className="btn-secondary" style={{ fontSize:12, display:'flex', gap:6, alignItems:'center' }}>
+              {reportGenerating ? '...' : '🤖'} Générer CR IA
+            </button>
+            <a href={`/api/export/patient?patient_id=${consultation.patient_id}`} target="_blank" className="btn-secondary" style={{ textDecoration:'none', fontSize:12, display:'flex', gap:6, alignItems:'center' }}>
+              📄 Exporter dossier
+            </a>
             <button onClick={sendReportEmail} disabled={emailSending || !consultation.patient?.email} className="btn-secondary" style={{ fontSize:12, display:'flex', gap:6, alignItems:'center' }}>
               {emailSending ? '...' : '📧'} Envoyer le rapport
             </button>

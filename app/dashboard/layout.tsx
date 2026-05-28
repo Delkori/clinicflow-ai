@@ -29,6 +29,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const [clinic,  setClinic]      = useState<any>(null)
   const [col, setCol]             = useState(false)
   const [unreadCount, setUnreadCount] = useState(0)
+  const [trialDaysLeft, setTrialDaysLeft] = useState<number|null>(null)
   const [showNotifs, setShowNotifs]   = useState(false)
   const [notifs, setNotifs]           = useState<any[]>([])
 
@@ -42,6 +43,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           setClinic(c)
           if (c) {
             supabase.from('notifications').select('*', { count:'exact', head:true }).eq('clinic_id', c.id).eq('is_read', false).then(({ count }) => setUnreadCount(count ?? 0))
+            supabase.from('subscriptions').select('status, trial_ends_at').eq('clinic_id', c.id).single().then(({ data: sub }) => {
+              if (sub?.status === 'trialing' && sub?.trial_ends_at) {
+                const days = Math.max(0, Math.ceil((new Date(sub.trial_ends_at).getTime() - Date.now()) / 86400000))
+                setTrialDaysLeft(days)
+              }
+            })
           }
         })
       })
@@ -104,6 +111,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
         {/* Bottom */}
         <div style={{ borderTop:'1px solid rgba(255,255,255,0.07)', padding:8 }}>
+          <NavLink href="/dashboard/billing" label="Abonnement" icon="💳" />
           <NavLink href="/dashboard/onboarding" label="Démarrage" icon="🚀" />
           <NavLink href="/dashboard/settings" label="Paramètres" icon="⚙" />
           <div style={{ display:'flex', alignItems:'center', gap:9, padding:'8px 10px', marginTop:4 }}>
@@ -125,6 +133,13 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       </aside>
 
       <main style={{ flex:1, overflow:'hidden', display:'flex', flexDirection:'column', position:'relative' }}>
+        {/* Trial banner */}
+        {trialDaysLeft !== null && trialDaysLeft <= 10 && (
+          <div style={{ position:'absolute', top:12, left:'50%', transform:'translateX(-50%)', zIndex:20, background: trialDaysLeft <= 3 ? '#FEF2F2' : '#FFFBEB', border:`1px solid ${trialDaysLeft <= 3 ? '#FECACA' : '#FDE68A'}`, borderRadius:99, padding:'4px 16px', fontSize:12, fontWeight:600, color: trialDaysLeft <= 3 ? '#DC2626' : '#D97706', display:'flex', alignItems:'center', gap:8, whiteSpace:'nowrap', boxShadow:'0 2px 8px rgba(0,0,0,.08)' }}>
+            {trialDaysLeft <= 0 ? '⚠️ Essai expiré' : `⏰ Essai : ${trialDaysLeft} jour${trialDaysLeft > 1 ? 's' : ''} restant${trialDaysLeft > 1 ? 's' : ''}`}
+            <a href="/dashboard/billing" style={{ color:'inherit', fontWeight:800, textDecoration:'underline' }}>Upgrader →</a>
+          </div>
+        )}
         {/* Notification bell */}
         <div style={{ position:'absolute', top:16, right:24, zIndex:20 }}>
           <button onClick={() => {
