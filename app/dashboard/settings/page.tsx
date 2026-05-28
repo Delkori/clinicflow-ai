@@ -60,6 +60,7 @@ const INTEGRATIONS = [
 const TABS = [
   { id: 'clinic',       label: 'Clinique',       icon: '🏥' },
   { id: 'treatments',   label: 'Traitements',    icon: '💊' },
+  { id: 'doctolib',     label: 'Doctolib',       icon: '📅' },
   { id: 'integrations', label: 'Intégrations',   icon: '🔌' },
   { id: 'account',      label: 'Mon compte',     icon: '👤' },
 ]
@@ -70,12 +71,15 @@ export default function SettingsPage() {
   const [clinic, setClinic]   = useState<any>(null)
   const [profile, setProfile] = useState<any>(null)
   const [treatments, setTreatments] = useState<any[]>([])
+  const [icalSources, setIcalSources] = useState<any[]>([])
+  const [intakeForms, setIntakeForms] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving]   = useState(false)
   const [saved, setSaved]     = useState(false)
   const [clinicName, setClinicName] = useState('')
   const [showNewTreatment, setShowNewTreatment] = useState(false)
   const [integConfigs, setIntegConfigs] = useState<Record<string,Record<string,string>>>({})
+  const [baseUrl, setBaseUrl] = useState('')
 
   useEffect(() => {
     async function load() {

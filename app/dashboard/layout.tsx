@@ -13,8 +13,8 @@ const NAV_MAIN = [
   { href:'/dashboard/booking',       label:'RDV en ligne',   icon:'🔗' },
 ]
 const NAV_TOOLS = [
-  { href:'/dashboard/automations',   label:'Automatisations',icon:'⚡' },
-  { href:'/dashboard/workflows',     label:'Workflows',      icon:'⬡' },
+  { href:'/dashboard/flows',         label:'Workflows',      icon:'⚡' },
+  { href:'/dashboard/automations',   label:'Logs auto.',     icon:'📋' },
   { href:'/dashboard/integrations',  label:'Intégrations',   icon:'🔌' },
   { href:'/dashboard/team',          label:'Équipe',         icon:'👥' },
   { href:'/dashboard/analytics',     label:'Analytiques',    icon:'▲' },
