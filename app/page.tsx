@@ -18,9 +18,9 @@ const STEPS = [
 ]
 
 const PRICING = [
-  { name:'Starter', price:'49', period:'mois', desc:'Pour un praticien solo', features:['1 praticien','Patients illimités','Workflows ×5','Booking public','Support email'], cta:'Commencer', highlight:false },
-  { name:'Pro', price:'99', period:'mois', desc:'Pour une clinique', features:['Jusqu\'à 5 praticiens','Patients illimités','Workflows illimités','IA transcription','Signature Yousign incluse','Support prioritaire'], cta:'Essai 14 jours', highlight:true },
-  { name:'Clinic', price:'199', period:'mois', desc:'Multi-sites', features:['Praticiens illimités','Multi-sites','API accès complet','Onboarding dédié','SLA 99.9%','Account manager'], cta:'Nous contacter', highlight:false },
+  { name:'Starter', price:'49', period:'mois', desc:'Pour un praticien solo', features:["1 praticien","Jusqu'à 200 patients","5 workflows","Booking public","Import Doctolib","Support email"], cta:'Commencer', highlight:false },
+  { name:'Pro', price:'99', period:'mois', desc:'Pour une clinique active', features:["Jusqu'à 5 praticiens","Jusqu'à 500 patients","Workflows illimités","🎙️ IA transcription","✍️ Signature Yousign","Sync iCal Doctolib auto","Support prioritaire"], cta:'Essai 14 jours', highlight:true },
+  { name:'Clinic', price:'199', period:'mois', desc:'Multi-sites & grandes équipes', features:["Praticiens illimités","Patients illimités","Multi-sites","API accès complet","Onboarding dédié","SLA 99.9%","Account manager"], cta:'Nous contacter', highlight:false },
 ]
 
 export default function HomePage() {

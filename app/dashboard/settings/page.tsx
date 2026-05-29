@@ -8,52 +8,137 @@ const INTEGRATIONS = [
     id: 'openai',
     label: 'OpenAI',
     icon: '🤖',
-    desc: 'Transcription audio (Whisper) et structuration IA (GPT-4) des consultations',
+    desc: 'Transcription audio (Whisper) et structuration IA (GPT-4o-mini) des consultations',
     color: '#10A37F',
+    bg: '#F0FDF4',
+    env_vars: ['OPENAI_API_KEY'],
     fields: [
-      { key: 'api_key', label: 'API Key', placeholder: 'sk-proj-...', type: 'password' },
-      { key: 'model',   label: 'Modèle',  placeholder: 'gpt-4o-mini',  type: 'text'     },
+      { key: 'OPENAI_API_KEY', label: 'API Key', placeholder: 'sk-proj-...', type: 'password' },
     ],
     docs: 'https://platform.openai.com/api-keys',
+    test_endpoint: '/api/ai/structure',
+    test_body: { transcription: 'Test transcription', treatment: 'Injection HA' },
+    test_label: 'Tester la transcription IA',
+    setup: [
+      'Créez un compte sur platform.openai.com',
+      'Allez dans API Keys → Create new secret key',
+      'Copiez la clé (commence par sk-proj-...)',
+      'Ajoutez-la dans Vercel → Settings → Environment Variables',
+    ],
   },
   {
     id: 'resend',
-    label: 'Resend — Emails',
+    label: 'Resend (emails transactionnels)',
     icon: '📧',
-    desc: 'Envoi automatique des emails aux patients selon le workflow',
+    desc: 'Envoi d\'emails automatiques aux patients. Recommandé pour les workflows.',
     color: '#0596DE',
+    bg: '#EFF6FF',
+    env_vars: ['RESEND_API_KEY', 'RESEND_FROM_EMAIL'],
     fields: [
-      { key: 'api_key',    label: 'API Key',           placeholder: 're_...', type: 'password' },
-      { key: 'from_email', label: 'Email expéditeur', placeholder: 'clinique@votre-domaine.fr', type: 'email' },
+      { key: 'RESEND_API_KEY', label: 'API Key', placeholder: 're_...', type: 'password' },
+      { key: 'RESEND_FROM_EMAIL', label: 'Email expéditeur', placeholder: 'noreply@votre-domaine.fr', type: 'email' },
     ],
     docs: 'https://resend.com/api-keys',
+    test_endpoint: null,
+    test_label: 'Envoyer un email de test',
+    setup: [
+      'Créez un compte gratuit sur resend.com (3000 emails/mois offerts)',
+      'Vérifiez votre domaine dans Resend → Domains',
+      'Créez une clé API dans Resend → API Keys',
+      'Ajoutez RESEND_API_KEY et RESEND_FROM_EMAIL dans Vercel',
+    ],
+    note: 'Sans configuration, les emails s\'envoient en mode démo (simulés mais non envoyés).',
+  },
+  {
+    id: 'gmail_smtp',
+    label: 'Gmail (SMTP direct)',
+    icon: '📨',
+    desc: 'Alternative à Resend — envoyez les emails directement depuis votre compte Gmail.',
+    color: '#EA4335',
+    bg: '#FEF0EF',
+    env_vars: ['GMAIL_USER', 'GMAIL_APP_PASSWORD'],
+    fields: [
+      { key: 'GMAIL_USER', label: 'Adresse Gmail', placeholder: 'votre-clinique@gmail.com', type: 'email' },
+      { key: 'GMAIL_APP_PASSWORD', label: 'Mot de passe application', placeholder: 'xxxx xxxx xxxx xxxx', type: 'password' },
+    ],
+    docs: 'https://support.google.com/accounts/answer/185833',
+    test_label: 'Tester l\'envoi Gmail',
+    setup: [
+      'Dans votre compte Google → Sécurité → Validation en 2 étapes (activer)',
+      'Puis Sécurité → Mots de passe des applications',
+      'Créez un mot de passe pour "ClinicFlow" (16 caractères)',
+      'Ajoutez GMAIL_USER et GMAIL_APP_PASSWORD dans Vercel',
+    ],
+    note: 'Gmail limite à 500 emails/jour. Pour plus de volume, utilisez Resend.',
   },
   {
     id: 'twilio',
-    label: 'Twilio — WhatsApp',
+    label: 'Twilio — WhatsApp & SMS',
     icon: '💬',
-    desc: 'Envoi de messages WhatsApp automatisés (suivi post-op, rappels)',
-    color: '#25D366',
+    desc: 'Envoi de messages WhatsApp et SMS automatisés aux patients',
+    color: '#F22F46',
+    bg: '#FFF0F0',
+    env_vars: ['TWILIO_ACCOUNT_SID', 'TWILIO_AUTH_TOKEN', 'TWILIO_WHATSAPP_FROM'],
     fields: [
-      { key: 'account_sid',   label: 'Account SID',    placeholder: 'ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx', type: 'text'     },
-      { key: 'auth_token',    label: 'Auth Token',     placeholder: '••••••••••••••••••••••••••••••••',  type: 'password' },
-      { key: 'from_number',   label: 'Numéro WhatsApp',placeholder: 'whatsapp:+14155238886',             type: 'text'     },
+      { key: 'TWILIO_ACCOUNT_SID', label: 'Account SID', placeholder: 'ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx', type: 'text' },
+      { key: 'TWILIO_AUTH_TOKEN', label: 'Auth Token', placeholder: '••••••••••••••••••••••••••••••••', type: 'password' },
+      { key: 'TWILIO_WHATSAPP_FROM', label: 'Numéro WhatsApp expéditeur', placeholder: 'whatsapp:+14155238886', type: 'text' },
     ],
     docs: 'https://console.twilio.com',
+    test_label: 'Envoyer un WA de test',
+    setup: [
+      'Créez un compte sur twilio.com',
+      'Dans la console → Account Info : copiez Account SID et Auth Token',
+      'Pour WhatsApp : activez le Sandbox WhatsApp dans Messaging → Try it out',
+      'Numéro sandbox par défaut : whatsapp:+14155238886',
+    ],
+    note: 'En mode sandbox, les patients doivent d\'abord envoyer "join [mot]" au numéro Twilio.',
   },
   {
-    id: 'docusign',
-    label: 'DocuSign — Signatures',
+    id: 'yousign',
+    label: 'Yousign — Signature électronique',
     icon: '✍️',
-    desc: 'Envoi et signature électronique des consentements éclairés',
-    color: '#7C3AED',
+    desc: 'Signature électronique conforme eIDAS. Consentements, devis, contrats.',
+    color: '#6B21A8',
+    bg: '#FAF5FF',
+    env_vars: ['YOUSIGN_API_KEY', 'YOUSIGN_SANDBOX'],
     fields: [
-      { key: 'integration_key', label: 'Integration Key', placeholder: 'xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx', type: 'text'     },
-      { key: 'account_id',      label: 'Account ID',      placeholder: 'xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx', type: 'text'     },
-      { key: 'access_token',    label: 'Access Token',    placeholder: '••••••••••••••••',                     type: 'password' },
+      { key: 'YOUSIGN_API_KEY', label: 'API Key', placeholder: 'Votre clé Yousign', type: 'password' },
+      { key: 'YOUSIGN_SANDBOX', label: 'Mode sandbox (test)', placeholder: 'true', type: 'text' },
     ],
-    docs: 'https://developers.docusign.com',
-    badge: 'Bientôt',
+    docs: 'https://developers.yousign.com',
+    test_label: 'Tester la connexion Yousign',
+    setup: [
+      'Créez un compte sur yousign.com (essai gratuit disponible)',
+      'Allez dans Organisation → API → Créer une clé API',
+      'Pour les tests, mettez YOUSIGN_SANDBOX=true',
+      'Pour la production, mettez YOUSIGN_SANDBOX=false',
+    ],
+    note: 'Environ 1€ par signature en production. Illimité en sandbox.',
+    highlight: true,
+  },
+  {
+    id: 'stripe',
+    label: 'Stripe — Paiements',
+    icon: '💳',
+    desc: 'Gestion des abonnements et facturation automatique',
+    color: '#635BFF',
+    bg: '#F0EFFF',
+    env_vars: ['STRIPE_SECRET_KEY', 'STRIPE_WEBHOOK_SECRET'],
+    fields: [
+      { key: 'STRIPE_SECRET_KEY', label: 'Clé secrète', placeholder: 'sk_live_...', type: 'password' },
+      { key: 'STRIPE_WEBHOOK_SECRET', label: 'Webhook Secret', placeholder: 'whsec_...', type: 'password' },
+      { key: 'STRIPE_PRICE_STARTER', label: 'Price ID Starter', placeholder: 'price_...', type: 'text' },
+      { key: 'STRIPE_PRICE_PRO', label: 'Price ID Pro', placeholder: 'price_...', type: 'text' },
+      { key: 'STRIPE_PRICE_CLINIC', label: 'Price ID Clinic', placeholder: 'price_...', type: 'text' },
+    ],
+    docs: 'https://dashboard.stripe.com',
+    setup: [
+      'Créez un compte sur stripe.com',
+      'Créez 3 produits avec les prix mensuel (49€, 99€, 199€)',
+      'Copiez les Price IDs (price_xxxxx) pour chaque produit',
+      'Configurez un webhook Stripe vers /api/stripe/webhook',
+    ],
   },
 ]
 
@@ -329,55 +414,132 @@ export default function SettingsPage() {
   )
 }
 
-function IntegCard({ integ }: { integ: typeof INTEGRATIONS[0] }) {
+function IntegCard({ integ }: { integ: (typeof INTEGRATIONS)[0] }) {
   const [expanded, setExpanded] = useState(false)
-  const [vals, setVals] = useState<Record<string,string>>({})
-  const [saving, setSaving] = useState(false)
-  const [saved, setSaved]   = useState(false)
-  const configured = Object.values(vals).some(v => v && !v.includes('•'))
+  const [testing, setTesting]   = useState(false)
+  const [testResult, setTestResult] = useState<{ok:boolean;msg:string}|null>(null)
 
-  function save() {
-    setSaving(true)
-    // In a real app, save to Supabase vault / env
-    setTimeout(() => { setSaving(false); setSaved(true); setTimeout(() => setSaved(false), 2000) }, 600)
+  // Check if env vars are likely set (we can't read them client-side, but we show setup guide)
+  const isConfigured = (integ as any).highlight === true // Yousign highlight = needs attention
+
+  async function runTest() {
+    setTesting(true)
+    setTestResult(null)
+    try {
+      if (integ.id === 'resend') {
+        // Test by sending to self via the email API
+        const res = await fetch('/api/email/send', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ patient_id: 'test', subject: 'Test ClinicFlow', body: 'Test d\'envoi email depuis ClinicFlow AI.' }),
+        })
+        const d = await res.json()
+        setTestResult(d.simulated
+          ? { ok: false, msg: 'Mode démo — clé Resend non configurée. Ajoutez RESEND_API_KEY dans Vercel.' }
+          : { ok: true, msg: '✓ Email envoyé avec succès !' })
+      } else if (integ.id === 'openai') {
+        const res = await fetch('/api/ai/structure', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ transcription: 'Bonjour, test de connexion OpenAI', treatment: 'Test' }),
+        })
+        const d = await res.json()
+        setTestResult(d.structured
+          ? { ok: true, msg: '✓ OpenAI connecté — IA fonctionnelle' }
+          : { ok: false, msg: 'Clé OpenAI non configurée ou invalide. Ajoutez OPENAI_API_KEY dans Vercel.' })
+      } else if (integ.id === 'yousign') {
+        setTestResult({ ok: false, msg: 'Testez depuis Documents → Envoyer pour signature (mode démo disponible sans clé).' })
+      } else if (integ.id === 'twilio') {
+        setTestResult({ ok: false, msg: 'Testez en envoyant un WhatsApp depuis la fiche d\'un patient qui a un numéro.' })
+      } else {
+        setTestResult({ ok: false, msg: 'Test non disponible pour cette intégration. Suivez les instructions de configuration.' })
+      }
+    } catch (err: any) {
+      setTestResult({ ok: false, msg: `Erreur : ${err.message}` })
+    }
+    setTesting(false)
   }
 
   return (
-    <div className="card" style={{ marginBottom:10, overflow:'hidden' }}>
-      <div style={{ padding:'16px 20px', display:'flex', alignItems:'center', gap:14, cursor:'pointer' }} onClick={() => setExpanded(!expanded)}>
-        <div style={{ width:40, height:40, borderRadius:10, background:`${integ.color}15`, border:`1.5px solid ${integ.color}30`, display:'flex', alignItems:'center', justifyContent:'center', fontSize:20, flexShrink:0 }}>
+    <div className="card" style={{ marginBottom:10, overflow:'hidden', borderLeft: (integ as any).highlight ? `4px solid ${integ.color}` : 'none' }}>
+      {/* Header */}
+      <div style={{ padding:'16px 20px', display:'flex', alignItems:'center', gap:14, cursor:'pointer' }}
+        onClick={() => { setExpanded(!expanded); setTestResult(null) }}>
+        <div style={{ width:40, height:40, borderRadius:10, background:(integ as any).bg ?? `${integ.color}15`, border:`1.5px solid ${integ.color}30`, display:'flex', alignItems:'center', justifyContent:'center', fontSize:20, flexShrink:0 }}>
           {integ.icon}
         </div>
         <div style={{ flex:1, minWidth:0 }}>
-          <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+          <div style={{ display:'flex', alignItems:'center', gap:8, flexWrap:'wrap' }}>
             <span style={{ fontSize:14, fontWeight:600, color:'var(--gray-900)' }}>{integ.label}</span>
-            {integ.badge && <span style={{ fontSize:10, background:'#FFFBEB', color:'#D97706', border:'1px solid #FDE68A', padding:'1px 7px', borderRadius:99, fontWeight:600 }}>{integ.badge}</span>}
-            {configured && <span style={{ fontSize:10, background:'#F0FDF4', color:'#059669', border:'1px solid #BBF7D0', padding:'1px 7px', borderRadius:99, fontWeight:600 }}>✓ Configuré</span>}
+            {(integ as any).highlight && <span style={{ fontSize:10, background:`${integ.color}15`, color:integ.color, border:`1px solid ${integ.color}30`, padding:'1px 7px', borderRadius:99, fontWeight:600 }}>Recommandé</span>}
           </div>
           <div style={{ fontSize:12, color:'var(--gray-500)', marginTop:2 }}>{integ.desc}</div>
         </div>
         <div style={{ display:'flex', gap:8, flexShrink:0, alignItems:'center' }}>
-          <a href={integ.docs} target="_blank" style={{ fontSize:11, color:'var(--blue)', textDecoration:'none' }}>Docs ↗</a>
-          <span style={{ fontSize:12, color:'var(--gray-400)', transition:'transform .15s', transform: expanded ? 'rotate(180deg)' : 'rotate(0deg)', display:'inline-block' }}>▾</span>
+          <a href={(integ as any).docs} target="_blank" onClick={e => e.stopPropagation()} style={{ fontSize:11, color:'var(--blue)', textDecoration:'none' }}>Docs ↗</a>
+          <span style={{ fontSize:12, color:'var(--gray-400)', display:'inline-block', transition:'transform .15s', transform: expanded ? 'rotate(180deg)' : 'rotate(0)' }}>▾</span>
         </div>
       </div>
 
       {expanded && (
         <div style={{ padding:'0 20px 20px', borderTop:'1px solid var(--gray-100)' }}>
-          <div style={{ paddingTop:16, display:'flex', flexDirection:'column', gap:12 }}>
-            {integ.fields.map(f => (
-              <div key={f.key}>
-                <label className="label">{f.label}</label>
-                <input className="input" type={f.type} value={vals[f.key] ?? ''} placeholder={f.placeholder}
-                  onChange={e => setVals(v => ({ ...v, [f.key]: e.target.value }))} />
+          <div style={{ paddingTop:16, display:'flex', flexDirection:'column', gap:16 }}>
+
+            {/* Setup instructions */}
+            {(integ as any).setup && (
+              <div style={{ background:'var(--blue-light)', border:'1px solid var(--blue-mid)', borderRadius:10, padding:'14px 16px' }}>
+                <div style={{ fontSize:12, fontWeight:700, color:'var(--blue-dark)', marginBottom:10 }}>📋 Comment configurer</div>
+                <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
+                  {(integ as any).setup.map((step: string, i: number) => (
+                    <div key={i} style={{ display:'flex', gap:8, alignItems:'flex-start' }}>
+                      <div style={{ width:20, height:20, borderRadius:'50%', background:'var(--blue)', color:'white', fontSize:10, fontWeight:700, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0, marginTop:1 }}>{i+1}</div>
+                      <span style={{ fontSize:12, color:'var(--blue-dark)', lineHeight:1.5 }}>{step}</span>
+                    </div>
+                  ))}
+                </div>
               </div>
-            ))}
-            <div style={{ display:'flex', gap:8, alignItems:'center', marginTop:4 }}>
-              <button onClick={save} disabled={saving} className="btn-primary" style={{ fontSize:13, width:'fit-content' }}>
-                {saved ? '✓ Sauvegardé' : saving ? 'Sauvegarde...' : 'Enregistrer la configuration'}
-              </button>
-              <span style={{ fontSize:11, color:'var(--gray-400)' }}>Les clés sont stockées de façon sécurisée</span>
+            )}
+
+            {/* Note */}
+            {(integ as any).note && (
+              <div style={{ background:'#FFFBEB', border:'1px solid #FDE68A', borderRadius:8, padding:'10px 12px', fontSize:12, color:'#92400E', display:'flex', gap:6 }}>
+                <span>ℹ️</span><span>{(integ as any).note}</span>
+              </div>
+            )}
+
+            {/* Env vars needed */}
+            <div>
+              <div style={{ fontSize:12, fontWeight:600, color:'var(--gray-700)', marginBottom:8 }}>Variables d'environnement à configurer dans Vercel</div>
+              <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
+                {(integ as any).fields.map((f: any) => (
+                  <div key={f.key} style={{ display:'flex', alignItems:'center', gap:8, padding:'8px 12px', background:'var(--gray-50)', borderRadius:8, border:'1px solid var(--gray-200)' }}>
+                    <div style={{ flex:1 }}>
+                      <div style={{ fontSize:11, fontWeight:600, color:'var(--gray-600)' }}>{f.label}</div>
+                      <code style={{ fontSize:10, color:integ.color, background:`${integ.color}10`, padding:'1px 6px', borderRadius:3 }}>{f.key}</code>
+                    </div>
+                    <div style={{ fontSize:11, color:'var(--gray-400)', fontStyle:'italic' }}>{f.placeholder}</div>
+                  </div>
+                ))}
+              </div>
+              <a href="https://vercel.com" target="_blank"
+                style={{ display:'inline-flex', alignItems:'center', gap:5, marginTop:10, fontSize:12, color:'var(--blue)', textDecoration:'none', fontWeight:600 }}>
+                Ouvrir Vercel → Settings → Environment Variables ↗
+              </a>
             </div>
+
+            {/* Test button */}
+            {(integ as any).test_label && (
+              <div>
+                <button onClick={runTest} disabled={testing}
+                  style={{ display:'flex', alignItems:'center', gap:8, padding:'9px 16px', borderRadius:8, border:`1px solid ${integ.color}40`, background:`${integ.color}10`, color:integ.color, cursor:'pointer', fontSize:13, fontWeight:600 }}>
+                  {testing ? <><div style={{ width:14, height:14, border:`2px solid ${integ.color}40`, borderTopColor:integ.color, borderRadius:'50%', animation:'spin .7s linear infinite' }} />Test en cours...</> : `🧪 ${(integ as any).test_label}`}
+                  <style>{'@keyframes spin{to{transform:rotate(360deg)}}'}</style>
+                </button>
+                {testResult && (
+                  <div style={{ marginTop:8, padding:'10px 12px', borderRadius:8, background: testResult.ok ? '#F0FDF4' : '#FFF8E6', border:`1px solid ${testResult.ok ? '#BBF7D0' : '#FDE68A'}`, fontSize:12, color: testResult.ok ? '#166534' : '#92400E' }}>
+                    {testResult.msg}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </div>
       )}
