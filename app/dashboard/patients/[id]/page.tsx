@@ -188,6 +188,7 @@ export default function PatientPage() {
           </div>
           <div style={{ display: 'flex', gap: '8px', flexShrink: 0 }}>
             {patient.phone && <a href={`https://wa.me/${patient.phone.replace(/\D/g,'')}`} target="_blank" style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 14px', borderRadius: '8px', background: '#25D366', color: 'white', fontSize: '13px', fontWeight: '600', textDecoration: 'none' }}>💬 WhatsApp</a>}
+            <Link href={`/dashboard/documents/sign?patient_id=${patient.id}`} className="btn-secondary" style={{ textDecoration: 'none', fontSize: '13px' }}>✍️ Envoyer document</Link>
             <a href={`/api/export/patient?patient_id=${patient.id}`} target="_blank" className="btn-secondary" style={{ textDecoration: 'none', fontSize: '13px' }}>📄 Exporter dossier</a>
             <Link href={`/dashboard/patients/${patient.id}/photos`} className="btn-secondary" style={{ textDecoration: 'none', fontSize: '13px' }}>📸 Photos</Link>
             <Link href={`/dashboard/consultations/new?patient_id=${patient.id}`} className="btn-primary" style={{ textDecoration: 'none', fontSize: '13px' }}>+ Consultation</Link>

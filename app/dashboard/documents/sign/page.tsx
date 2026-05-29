@@ -1,5 +1,6 @@
 'use client'
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback, Suspense } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { formatDateTime } from '@/lib/utils'
 import Link from 'next/link'
@@ -28,7 +29,17 @@ const STATUS_CFG: Record<string, {label:string;color:string;bg:string;icon:strin
 }
 
 export default function DocumentSignPage() {
+  return (
+    <Suspense fallback={<div style={{ display:'flex', alignItems:'center', justifyContent:'center', height:'100%' }}><div style={{ width:28, height:28, border:'3px solid var(--gray-200)', borderTopColor:'var(--blue)', borderRadius:'50%', animation:'spin .7s linear infinite' }} /><style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style></div>}>
+      <SignContent />
+    </Suspense>
+  )
+}
+
+function SignContent() {
   const supabase = createClient()
+  const searchParams = useSearchParams()
+  const preselectedPatientId = searchParams.get('patient_id')
   const [tab, setTab] = useState<'send'|'history'>('send')
   const [clinicId, setClinicId] = useState('')
   const [patients, setPatients]   = useState<any[]>([])
@@ -307,10 +318,20 @@ export default function DocumentSignPage() {
                       <div style={{ display:'flex', flexDirection:'column', gap:6, maxHeight:300, overflowY:'auto' }}>
                         {templates.map(t => (
                           <div key={t.id} onClick={() => { setSelectedTemplate(t); setStep(3) }}
-                            style={{ padding:'11px 14px', borderRadius:9, cursor:'pointer', border:`1.5px solid ${selectedTemplate?.id===t.id ? 'var(--blue)' : 'var(--gray-200)'}`, background: selectedTemplate?.id===t.id ? 'var(--blue-light)' : 'white', transition:'all .1s' }}>
-                            <div style={{ fontSize:13, fontWeight:500, color:'var(--gray-900)', marginBottom:2 }}>{t.name}</div>
-                            <span style={{ fontSize:10, fontWeight:600, background:'var(--gray-100)', color:'var(--gray-500)', padding:'1px 6px', borderRadius:99 }}>{t.type}</span>
-                            {t.category === 'imported' && <span style={{ fontSize:10, fontWeight:600, background:'#EFF6FF', color:'#1D4ED8', padding:'1px 6px', borderRadius:99, marginLeft:4 }}>📎 Importé</span>}
+                            style={{ padding:'12px 14px', borderRadius:9, cursor:'pointer', border:`1.5px solid ${selectedTemplate?.id===t.id ? 'var(--blue)' : 'var(--gray-200)'}`, background: selectedTemplate?.id===t.id ? 'var(--blue-light)' : 'white', transition:'all .1s', display:'flex', gap:10, alignItems:'flex-start' }}>
+                            <div style={{ fontSize:18, flexShrink:0 }}>
+                              {t.type==='consent'||t.type==='consentement' ? '📋' : t.type==='devis' ? '💰' : t.type==='imported' ? '📎' : '📄'}
+                            </div>
+                            <div style={{ flex:1, minWidth:0 }}>
+                              <div style={{ fontSize:13, fontWeight:600, color:'var(--gray-900)', marginBottom:3 }}>{t.name}</div>
+                              <div style={{ display:'flex', gap:5, flexWrap:'wrap' }}>
+                                <span style={{ fontSize:10, fontWeight:600, background: t.type==='consent'||t.type==='consentement' ? '#FAF5FF' : t.type==='devis' ? '#FFFBEB' : 'var(--gray-100)', color: t.type==='consent'||t.type==='consentement' ? '#6B21A8' : t.type==='devis' ? '#D97706' : 'var(--gray-500)', padding:'1px 6px', borderRadius:99 }}>
+                                  {t.type==='consent'||t.type==='consentement' ? 'Consentement' : t.type==='devis' ? 'Devis' : t.type}
+                                </span>
+                                {t.category === 'imported' && <span style={{ fontSize:10, fontWeight:600, background:'#EFF6FF', color:'#1D4ED8', padding:'1px 6px', borderRadius:99 }}>Importé</span>}
+                                {selectedTemplate?.id===t.id && <span style={{ fontSize:10, fontWeight:600, background:'var(--blue)', color:'white', padding:'1px 6px', borderRadius:99 }}>✓ Sélectionné</span>}
+                              </div>
+                            </div>
                           </div>
                         ))}
                         {templates.length === 0 && (
