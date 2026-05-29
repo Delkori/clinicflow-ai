@@ -79,7 +79,10 @@ export default function DocumentsPage() {
           <Link href="/dashboard/documents/templates" className="btn-secondary" style={{ textDecoration:'none', fontSize:13 }}>
             📝 Templates
           </Link>
-          <button onClick={() => setShowGenerate(true)} className="btn-primary" style={{ fontSize:13 }}>
+          <Link href="/dashboard/documents/sign" className="btn-primary" style={{ textDecoration:'none', fontSize:13, display:'flex', gap:6, alignItems:'center' }}>
+            ✍️ Envoyer pour signature
+          </Link>
+          <button onClick={() => setShowGenerate(true)} className="btn-secondary" style={{ fontSize:13 }}>
             + Générer un document
           </button>
         </div>

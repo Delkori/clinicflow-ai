@@ -11,7 +11,7 @@ const PLANS = [
     desc: 'Parfait pour démarrer',
     features: [
       '1 praticien',
-      "Jusqu'à 500 patients",
+      "Jusqu'à 200 patients",
       '5 workflows',
       'Prise de RDV en ligne',
       'Import Doctolib CSV',
@@ -25,7 +25,7 @@ const PLANS = [
     highlight: true,
     features: [
       "Jusqu'à 5 praticiens",
-      'Patients illimités',
+      'Jusqu\'à 500 patients',
       'Workflows illimités',
       '🎙️ IA transcription incluse',
       '✍️ Signature Yousign incluse',
