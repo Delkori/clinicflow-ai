@@ -6,11 +6,14 @@ import { createClient } from '@/lib/supabase/client'
 
 // Navigation pour tous les utilisateurs
 const NAV_CLINIC = [
-  { href:'/dashboard',               label:'Accueil',         icon:'▦', exact:true },
-  { href:'/dashboard/patients',      label:'Patients',        icon:'◎' },
-  { href:'/dashboard/consultations', label:'Consultations',   icon:'✦' },
-  { href:'/dashboard/agenda',        label:'Agenda',          icon:'◫' },
-  { href:'/dashboard/documents',     label:'Documents',       icon:'📄' },
+  { href:'/dashboard',                  label:'Accueil',         icon:'▦', exact:true },
+  { href:'/dashboard/salle-attente',    label:"Salle d'attente", icon:'🏥' },
+  { href:'/dashboard/patients',         label:'Patients',        icon:'◎' },
+  { href:'/dashboard/consultations',    label:'Consultations',   icon:'✦' },
+  { href:'/dashboard/ordonnances',      label:'Ordonnances',     icon:'📋' },
+  { href:'/dashboard/agenda',           label:'Agenda',          icon:'◫' },
+  { href:'/dashboard/documents',        label:'Documents',       icon:'📄' },
+  { href:'/dashboard/facturation',      label:'Facturation',     icon:'💰' },
 ]
 
 // Navigation supplémentaire pour admin (médecin principal)
