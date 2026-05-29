@@ -31,8 +31,18 @@ export default function AnalyticsPage() {
         supabase.from('patients').select('source'),
       ])
 
-      // Consultations by treatment
+      // Consultations by treatment + acte_type breakdown
       const byTreatment = []
+      // Also get acte_type breakdown (from specialized consultations)
+      const { data: acteData } = await supabase.from('consultations').select('acte_type, devis_montant')
+      const acteMap: Record<string,{count:number;ca:number}> = {}
+      ;(acteData ?? []).forEach((c: any) => {
+        if (c.acte_type) {
+          if (!acteMap[c.acte_type]) acteMap[c.acte_type] = { count: 0, ca: 0 }
+          acteMap[c.acte_type].count++
+          acteMap[c.acte_type].ca += c.devis_montant ?? 0
+        }
+      })
       if (treatments) {
         for (const t of treatments) {
           const { count } = await supabase.from('consultations').select('*', { count:'exact', head:true }).eq('treatment_id', t.id)
@@ -66,7 +76,7 @@ export default function AnalyticsPage() {
         monthTrend.push({ month: d.toLocaleDateString('fr-FR', { month:'short' }), patients: c ?? 0 })
       }
 
-      setData({ totalPatients, newPatients, totalConsults, pendingExec, byTreatment, sourceData, channelMap, monthTrend })
+      setData({ totalPatients, newPatients, totalConsults, pendingExec, byTreatment, acteMap, sourceData, channelMap, monthTrend })
       setLoading(false)
     }
     load()
@@ -203,6 +213,119 @@ export default function AnalyticsPage() {
           </div>
         </div>
       </div>
+
+      {/* ── Répartition Sankey des traitements ── */}
+      <SankeyTreatments byTreatment={data.byTreatment ?? []} acteMap={data.acteMap ?? {}} />
+    </div>
+  )
+}
+
+// ── Sankey inline component ────────────────────────────────────────────────
+function SankeyTreatments({ byTreatment, acteMap }: { byTreatment: any[]; acteMap: Record<string,{count:number;ca:number}> }) {
+  const POLE_COLORS: Record<string, string> = {
+    'Laser': '#E879B0', 'Greffe': '#D97706', 'Acide': '#7C3AED',
+    'Botox': '#6366F1', 'Peeling': '#059669', 'Injection': '#7C3AED',
+    'Rhinoplastie': '#059669', 'Chirurgie': '#059669',
+  }
+
+  // Build nodes from real data
+  const allItems: { label: string; count: number; color: string; isActe: boolean }[] = []
+  
+  // From treatments (linked to consultations)
+  byTreatment.forEach((t, i) => {
+    const colors = ['#4F8EF7','#22C55E','#E879B0','#F59E0B','#8B5CF6','#EF4444','#0891B2','#10B981']
+    allItems.push({ label: t.name, count: t.count, color: colors[i % colors.length], isActe: false })
+  })
+  
+  // From acte_type (specialized consultations)
+  Object.entries(acteMap).forEach(([acte, stats], i) => {
+    const colors = ['#6366F1','#F97316','#14B8A6','#F43F5E','#84CC16','#A855F7']
+    if (!allItems.find(a => a.label.toLowerCase().includes(acte.toLowerCase().slice(0,6)))) {
+      allItems.push({ label: acte, count: stats.count, color: colors[i % colors.length], isActe: true })
+    }
+  })
+
+  const total = allItems.reduce((s, i) => s + i.count, 0)
+  
+  if (allItems.length === 0) return null
+
+  // Sort by count
+  allItems.sort((a, b) => b.count - a.count)
+
+  const SVG_W = 640, BAR_H = 40, GAP = 10, PADDING_TOP = 30
+  const SVG_H = allItems.length * (BAR_H + GAP) + PADDING_TOP + 20
+  const LEFT_W = 120, RIGHT_X = LEFT_W + 220, RIGHT_W = 160
+  const TOTAL_H = allItems.reduce((s) => s + BAR_H, 0) + (allItems.length - 1) * GAP
+
+  return (
+    <div className="card" style={{ padding: '20px 24px', marginTop: 20 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+        <div>
+          <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--gray-900)' }}>Répartition des traitements</div>
+          <div style={{ fontSize: 12, color: 'var(--gray-500)', marginTop: 2 }}>{total} consultations · {allItems.length} traitement{allItems.length > 1 ? 's' : ''}</div>
+        </div>
+        <span style={{ fontSize: 11, background: 'var(--blue-light)', color: 'var(--blue-dark)', padding: '3px 10px', borderRadius: 99, fontWeight: 600 }}>
+          Données réelles
+        </span>
+      </div>
+
+      <div style={{ overflowX: 'auto' }}>
+        <svg width={SVG_W} height={SVG_H} style={{ display: 'block', minWidth: 400 }}>
+          {/* Titre colonnes */}
+          <text x={LEFT_W / 2} y={16} textAnchor="middle" fontSize={9} fontWeight="700" fill="#9CA3AF" fontFamily="-apple-system,sans-serif" letterSpacing="1">CLINIQUE</text>
+          <text x={RIGHT_X + RIGHT_W / 2} y={16} textAnchor="middle" fontSize={9} fontWeight="700" fill="#9CA3AF" fontFamily="-apple-system,sans-serif" letterSpacing="1">TRAITEMENTS</text>
+
+          {/* Bloc clinique global */}
+          <rect x={0} y={PADDING_TOP} width={LEFT_W} height={TOTAL_H} fill="#0F172A" rx={8} />
+          <text x={LEFT_W / 2} y={PADDING_TOP + TOTAL_H / 2 - 8} textAnchor="middle" fontSize={11} fontWeight="700" fill="white" fontFamily="-apple-system,sans-serif">Ma Clinique</text>
+          <text x={LEFT_W / 2} y={PADDING_TOP + TOTAL_H / 2 + 8} textAnchor="middle" fontSize={10} fill="rgba(255,255,255,0.6)" fontFamily="-apple-system,sans-serif">{total} consultations</text>
+
+          {/* Rubans + barres droite */}
+          {allItems.map((item, i) => {
+            const y = PADDING_TOP + i * (BAR_H + GAP)
+            const h = BAR_H
+            // Source point (on right edge of left block)
+            const srcY = PADDING_TOP + (i / allItems.length) * TOTAL_H
+            const srcH = TOTAL_H / allItems.length
+            const cx = (LEFT_W + RIGHT_X) / 2
+
+            return (
+              <g key={item.label}>
+                {/* Ribbon */}
+                <path
+                  d={`M ${LEFT_W} ${srcY} C ${cx} ${srcY}, ${cx} ${y}, ${RIGHT_X} ${y}
+                      L ${RIGHT_X} ${y + h}
+                      C ${cx} ${y + h}, ${cx} ${srcY + srcH}, ${LEFT_W} ${srcY + srcH} Z`}
+                  fill={item.color}
+                  opacity={0.18}
+                />
+                {/* Color bar left */}
+                <rect x={LEFT_W - 4} y={srcY} width={4} height={srcH} fill={item.color} rx={1} />
+                {/* Bar right */}
+                <rect x={RIGHT_X} y={y} width={6} height={h} fill={item.color} rx={2} />
+                {/* Label card */}
+                <rect x={RIGHT_X + 10} y={y} width={RIGHT_W - 12} height={h} fill="#F9FAFB" rx={6} />
+                <text x={RIGHT_X + 18} y={y + h / 2 - 4} fontSize={11} fontWeight="600" fill="#111827" fontFamily="-apple-system,sans-serif">
+                  {item.label.length > 18 ? item.label.slice(0, 17) + '…' : item.label}
+                </text>
+                <text x={RIGHT_X + 18} y={y + h / 2 + 9} fontSize={10} fill="#6B7280" fontFamily="-apple-system,sans-serif">
+                  {item.count} consultation{item.count > 1 ? 's' : ''}
+                  {total > 0 ? ` · ${Math.round(item.count / total * 100)}%` : ''}
+                </text>
+                {/* Color pip right */}
+                <rect x={RIGHT_X + RIGHT_W - 4} y={y + 2} width={3} height={h - 4} fill={item.color} rx={1} />
+              </g>
+            )
+          })}
+        </svg>
+      </div>
+
+      {total === 0 && (
+        <div style={{ textAlign: 'center', padding: '32px', color: 'var(--gray-400)', fontSize: 13 }}>
+          <div style={{ fontSize: 28, marginBottom: 8 }}>📊</div>
+          Aucune consultation enregistrée encore — les données apparaîtront ici automatiquement.
+        </div>
+      )}
     </div>
   )
 }
