@@ -39,6 +39,7 @@ export default function HomePage() {
         <div style={{ display:'flex', alignItems:'center', gap:8 }}>
           <a href="#pricing" style={{ fontSize:13, color:'#64748B', textDecoration:'none', padding:'6px 12px' }}>Tarifs</a>
           <Link href="/legal" style={{ fontSize:13, color:'#64748B', textDecoration:'none', padding:'6px 12px' }}>Légal</Link>
+          <Link href="/calculateur" style={{ fontSize:13, color:'#64748B', textDecoration:'none', padding:'6px 12px' }}>Simulateur</Link>
           <Link href="/auth/login" style={{ fontSize:13, color:'#64748B', textDecoration:'none', padding:'6px 12px' }}>Connexion</Link>
           <Link href="/auth/signup" style={{ fontSize:13, fontWeight:600, color:'white', background:'#0596DE', borderRadius:8, padding:'7px 16px', textDecoration:'none' }}>Essai gratuit →</Link>
         </div>
