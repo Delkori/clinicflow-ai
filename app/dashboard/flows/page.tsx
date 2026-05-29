@@ -94,7 +94,7 @@ export default function FlowsPage() {
             </div>
           </div>
           <div style={{ display:'flex', gap:8, flexShrink:0 }}>
-            <Link href="/dashboard/flows/apps" style={{ fontSize:12, padding:'8px 14px', borderRadius:8, border:'1px solid rgba(255,255,255,0.15)', color:'rgba(255,255,255,0.7)', textDecoration:'none', fontWeight:500 }}>
+            <Link href="/dashboard/automations-v2?tab=connectors" style={{ fontSize:12, padding:'8px 14px', borderRadius:8, border:'1px solid rgba(255,255,255,0.15)', color:'rgba(255,255,255,0.7)', textDecoration:'none', fontWeight:500 }}>
               🔌 Mes apps
             </Link>
             <button onClick={() => setShowNew(true)} style={{ fontSize:12, padding:'8px 14px', borderRadius:8, border:'none', background:'#0596DE', color:'white', cursor:'pointer', fontWeight:600 }}>
