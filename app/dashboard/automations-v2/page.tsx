@@ -25,7 +25,7 @@ const TYPE_CFG: Record<string,{icon:string;label:string;color:string;bg:string}>
 }
 
 const PROVIDERS = [
-  { id:'n8n',             label:'n8n',              icon:'🔄', color:'#E44B26', bg:'#FFF4F2' },
+  { id:'ClinicFlow Flows',             label:'ClinicFlow Flows',              icon:'🔄', color:'#E44B26', bg:'#FFF4F2' },
   { id:'zapier',          label:'Zapier',           icon:'⚡', color:'#FF4A00', bg:'#FFF3F0' },
   { id:'make',            label:'Make',             icon:'🔷', color:'#6D00CC', bg:'#F5F0FF' },
   { id:'slack',           label:'Slack',            icon:'💬', color:'#4A154B', bg:'#F9F0FA' },
@@ -414,7 +414,7 @@ function AutomationsContent() {
                   <div className="card" style={{ padding:40, textAlign:'center' }}>
                     <div style={{ fontSize:36, marginBottom:10 }}>🔌</div>
                     <div style={{ fontSize:14, fontWeight:500, color:'var(--gray-700)', marginBottom:6 }}>Aucune connexion encore</div>
-                    <div style={{ fontSize:13, color:'var(--gray-400)', marginBottom:16, maxWidth:320, margin:'0 auto 16px' }}>Connectez n8n, Zapier, Slack ou n'importe quelle app</div>
+                    <div style={{ fontSize:13, color:'var(--gray-400)', marginBottom:16, maxWidth:320, margin:'0 auto 16px' }}>Connectez ClinicFlow Flows, Zapier, Slack ou n'importe quelle app</div>
                     <button onClick={() => setShowNewWebhook(true)} className="btn-primary" style={{ fontSize:13 }}>+ Créer une connexion</button>
                   </div>
                 ) : (

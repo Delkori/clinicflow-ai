@@ -15,7 +15,7 @@ const NODE_TYPES: Record<string, NodeTypeDef> = {
   send_intake_form: { label:'Formulaire Patient',  icon:'📋', color:'#059669', bg:'#F0FDF4', category:'action',   description:'Envoie le formulaire de dossier' },
   create_appointment:{ label:'Créer un RDV',       icon:'📅', color:'#0891B2', bg:'#ECFEFF', category:'action',  description:'Crée un RDV dans l\'agenda' },
   notify_team:      { label:'Notifier l\'équipe',  icon:'🔔', color:'#475569', bg:'#F8FAFC', category:'action',   description:'Notification interne à l\'équipe' },
-  webhook:          { label:'Webhook',             icon:'🔗', color:'#475569', bg:'#F8FAFC', category:'action',   description:'Appel HTTP vers n8n, Zapier...' },
+  webhook:          { label:'Webhook',             icon:'🔗', color:'#475569', bg:'#F8FAFC', category:'action',   description:'Appel HTTP vers ClinicFlow Flows, Zapier...' },
   google_sheets:    { label:'Google Sheets',       icon:'📊', color:'#0F9D58', bg:'#E8F5E9', category:'action',   description:'Ajoute une ligne dans Sheets' },
   slack:            { label:'Slack',               icon:'💬', color:'#4A154B', bg:'#F9F0FA', category:'action',   description:'Message dans un canal Slack' },
   delay:            { label:'Délai',               icon:'⏰', color:'#D97706', bg:'#FFFBEB', category:'control',  description:'Attendre X jours/heures' },
@@ -168,7 +168,7 @@ function NodeConfigPanel({ node, onChange, onDelete, treatments, templates, appC
           <div>
             <label style={{ fontSize:11, fontWeight:600, color:'var(--gray-500)', textTransform:'uppercase', letterSpacing:'.06em', display:'block', marginBottom:5 }}>URL du webhook</label>
             <input className="input" value={config.url ?? ''} onChange={e => up('url', e.target.value)} placeholder="https://hooks.zapier.com/..." style={{ fontSize:13 }} />
-            <div style={{ fontSize:10, color:'var(--gray-400)', marginTop:4 }}>Compatible n8n, Zapier, Make, Slack, ou toute URL HTTP POST</div>
+            <div style={{ fontSize:10, color:'var(--gray-400)', marginTop:4 }}>Compatible ClinicFlow Flows, Zapier, Make, Slack, ou toute URL HTTP POST</div>
           </div>
           <div>
             <label style={{ fontSize:11, fontWeight:600, color:'var(--gray-500)', textTransform:'uppercase', letterSpacing:'.06em', display:'block', marginBottom:5 }}>Payload JSON (optionnel)</label>

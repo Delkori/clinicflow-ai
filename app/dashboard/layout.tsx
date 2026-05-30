@@ -37,7 +37,7 @@ const NAV_FOOTER_USER = [
   { href:'/dashboard/settings',  label:'Paramètres',     icon:'⚙' },
 ]
 
-const ADMIN_ROLES = ['medecin', 'admin']
+const ADMIN_ROLES = ['medecin', 'admin', 'docteur', 'owner']
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()

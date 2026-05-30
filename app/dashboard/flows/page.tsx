@@ -90,7 +90,7 @@ export default function FlowsPage() {
           <div style={{ flex:1 }}>
             <div style={{ color:'white', fontSize:15, fontWeight:700, marginBottom:4 }}>Automatisez votre parcours patient, de A à Z</div>
             <div style={{ color:'rgba(255,255,255,0.55)', fontSize:13, lineHeight:1.6 }}>
-              Connectez vos apps et programmez des séquences automatiques : emails, WhatsApp, PDF, signatures, rappels, conditions... Comme n8n, mais conçu pour les médecins.
+              Connectez vos apps et programmez des séquences automatiques : emails, WhatsApp, PDF, signatures, rappels, conditions... Comme ClinicFlow Flows, mais conçu pour les médecins.
             </div>
           </div>
           <div style={{ display:'flex', gap:8, flexShrink:0 }}>
