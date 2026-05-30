@@ -23,6 +23,7 @@ const NAV_ADMIN = [
   { href:'/dashboard/stocks',        label:'Stocks',           icon:'📦' },
   { href:'/dashboard/fidelite',      label:'Fidélité',         icon:'🎁' },
   { href:'/dashboard/avis',          label:'Avis & Réputation',icon:'⭐' },
+  { href:'/dashboard/apps',           label:'Applications',      icon:'🔌' },
 ]
 
 // Footer nav selon rôle
