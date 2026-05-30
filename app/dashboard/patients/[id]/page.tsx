@@ -191,6 +191,7 @@ export default function PatientPage() {
             <Link href={`/dashboard/documents/sign?patient_id=${patient.id}`} className="btn-secondary" style={{ textDecoration: 'none', fontSize: '13px' }}>✍️ Envoyer document</Link>
             <a href={`/api/export/patient?patient_id=${patient.id}`} target="_blank" className="btn-secondary" style={{ textDecoration: 'none', fontSize: '13px' }}>📄 Exporter dossier</a>
             <Link href={`/dashboard/patients/${patient.id}/photos`} className="btn-secondary" style={{ textDecoration: 'none', fontSize: '13px' }}>📸 Photos</Link>
+            <Link href={`/dashboard/patients/${patient.id}/injectables`} className="btn-secondary" style={{ textDecoration: 'none', fontSize: '13px' }}>💉 Injectables</Link>
             <Link href={`/dashboard/consultations/new?patient_id=${patient.id}`} className="btn-primary" style={{ textDecoration: 'none', fontSize: '13px' }}>+ Consultation</Link>
           </div>
         </div>
