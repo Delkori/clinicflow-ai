@@ -20,6 +20,9 @@ const NAV_CLINIC = [
 const NAV_ADMIN = [
   { href:'/dashboard/automations-v2',label:'Automatisations', icon:'⚡' },
   { href:'/dashboard/analytics',     label:'Analytiques',     icon:'▲' },
+  { href:'/dashboard/stocks',        label:'Stocks',           icon:'📦' },
+  { href:'/dashboard/fidelite',      label:'Fidélité',         icon:'🎁' },
+  { href:'/dashboard/avis',          label:'Avis & Réputation',icon:'⭐' },
 ]
 
 // Footer nav selon rôle
