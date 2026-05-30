@@ -49,6 +49,10 @@ export default function PatientPhotosPage() {
   const [compareLeft,  setCompareLeft]  = useState<any>(null)
   const [compareRight, setCompareRight] = useState<any>(null)
   const [isDraggingSlider, setIsDraggingSlider] = useState(false)
+  const [zoomLevel, setZoomLevel]   = useState(1)
+  const [zoomPos,   setZoomPos]     = useState({ x: 0, y: 0 })
+  const [isDraggingZoom, setIsDraggingZoom] = useState(false)
+  const [dragStart, setDragStart]   = useState({ x: 0, y: 0 })
   const compareRef = useRef<HTMLDivElement>(null)
 
   const showToast = (msg: string, ok = true) => {
@@ -88,6 +92,7 @@ export default function PatientPhotosPage() {
   }, [patientId])
 
   useEffect(() => { load() }, [load])
+
 
   // Upload handler
   async function handleFiles(files: FileList) {
@@ -200,6 +205,22 @@ export default function PatientPhotosPage() {
   }, [isDraggingSlider, handleSliderMove])
 
   const filteredPhotos = photos.filter(p => {
+
+  // Keyboard navigation for lightbox
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (!lightbox) return
+      const idx = filteredPhotos.indexOf(lightbox)
+      if (e.key === 'ArrowLeft' && idx > 0) setLightbox(filteredPhotos[idx - 1])
+      if (e.key === 'ArrowRight' && idx < filteredPhotos.length - 1) setLightbox(filteredPhotos[idx + 1])
+      if (e.key === 'Escape') { setLightbox(null); setZoomLevel(1) }
+      if (e.key === '+' || e.key === '=') setZoomLevel(z => Math.min(4, z + 0.5))
+      if (e.key === '-') setZoomLevel(z => Math.max(1, z - 0.5))
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [lightbox, filteredPhotos])
+
     if (filterType !== 'all' && p.type !== filterType) return false
     if (filterSession !== 'all' && p.session_id !== filterSession) return false
     return true
@@ -592,8 +613,8 @@ export default function PatientPhotosPage() {
       {/* Lightbox */}
       {lightbox && (
         <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.92)', zIndex:300, display:'flex', alignItems:'center', justifyContent:'center' }}
-          onClick={() => setLightbox(null)}>
-          <button onClick={() => setLightbox(null)} style={{ position:'absolute', top:16, right:16, background:'rgba(255,255,255,0.15)', border:'none', cursor:'pointer', color:'white', fontSize:22, width:40, height:40, borderRadius:'50%', display:'flex', alignItems:'center', justifyContent:'center' }}>×</button>
+          onClick={() => { setLightbox(null); setZoomLevel(1) }}>
+          <button onClick={() => { setLightbox(null); setZoomLevel(1) }} style={{ position:'absolute', top:16, right:16, background:'rgba(255,255,255,0.15)', border:'none', cursor:'pointer', color:'white', fontSize:22, width:40, height:40, borderRadius:'50%', display:'flex', alignItems:'center', justifyContent:'center' }}>×</button>
 
           {/* Prev/Next */}
           {filteredPhotos.indexOf(lightbox) > 0 && (
@@ -606,7 +627,27 @@ export default function PatientPhotosPage() {
           )}
 
           <div style={{ maxWidth:'85vw', maxHeight:'85vh', display:'flex', flexDirection:'column', alignItems:'center', gap:16 }} onClick={e => e.stopPropagation()}>
-            <img src={lightbox.url} alt="" style={{ maxWidth:'100%', maxHeight:'75vh', objectFit:'contain', borderRadius:10, boxShadow:'0 20px 60px rgba(0,0,0,.5)' }} />
+            {/* Zoom controls */}
+            <div style={{ position:'absolute', top:16, left:'50%', transform:'translateX(-50%)', display:'flex', gap:6, zIndex:10 }}>
+              <button onClick={() => setZoomLevel(z => Math.max(1, z - 0.5))}
+                style={{ width:32, height:32, borderRadius:'50%', background:'rgba(255,255,255,0.15)', border:'none', cursor:'pointer', color:'white', fontSize:18, display:'flex', alignItems:'center', justifyContent:'center' }}>−</button>
+              <span style={{ fontSize:12, color:'rgba(255,255,255,0.7)', padding:'6px 10px', background:'rgba(0,0,0,0.4)', borderRadius:99 }}>
+                {Math.round(zoomLevel * 100)}%
+              </span>
+              <button onClick={() => setZoomLevel(z => Math.min(4, z + 0.5))}
+                style={{ width:32, height:32, borderRadius:'50%', background:'rgba(255,255,255,0.15)', border:'none', cursor:'pointer', color:'white', fontSize:18, display:'flex', alignItems:'center', justifyContent:'center' }}>+</button>
+              {zoomLevel > 1 && (
+                <button onClick={() => setZoomLevel(1)}
+                  style={{ fontSize:11, padding:'4px 10px', borderRadius:99, background:'rgba(255,255,255,0.15)', border:'none', cursor:'pointer', color:'white' }}>Réinitialiser</button>
+              )}
+            </div>
+            <div style={{ overflow: zoomLevel > 1 ? 'hidden' : 'visible', maxWidth:'100%', maxHeight:'75vh', display:'flex', alignItems:'center', justifyContent:'center' }}>
+              <img src={lightbox.url} alt=""
+                onWheel={e => { e.preventDefault(); const delta = e.deltaY > 0 ? -0.25 : 0.25; setZoomLevel(z => Math.max(1, Math.min(4, z + delta))) }}
+                style={{ maxWidth:'100%', maxHeight:'75vh', objectFit:'contain', borderRadius:10, boxShadow:'0 20px 60px rgba(0,0,0,.5)', transform:`scale(${zoomLevel})`, transformOrigin:'center center', transition: zoomLevel === 1 ? 'transform .2s' : 'none', cursor: zoomLevel > 1 ? 'zoom-out' : 'zoom-in' }}
+                onClick={() => zoomLevel > 1 ? setZoomLevel(1) : setZoomLevel(2)}
+              />
+            </div>
             {/* Meta */}
             <div style={{ display:'flex', gap:10, alignItems:'center', flexWrap:'wrap', justifyContent:'center' }}>
               {(() => { const tc = typeCfg(lightbox.type); return <span style={{ fontSize:12, fontWeight:600, color:tc.color, background:tc.bg, padding:'3px 10px', borderRadius:99 }}>{tc.label}</span> })()}

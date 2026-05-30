@@ -25,6 +25,7 @@ export default function DashboardPage() {
         { data: recentPatients },
         { data: pendingExec },
         { data: activeJourneys },
+        { data: facturesMois },
       ] = await Promise.all([
         supabase.from('appointments').select('*, patient:patients(first_name,last_name), treatment:treatments(name,color)').gte('appointment_date', todayStart).lte('appointment_date', todayEnd).order('appointment_date'),
         supabase.from('patients').select('*', { count:'exact', head:true }).gte('created_at', monthStart),
@@ -33,6 +34,7 @@ export default function DashboardPage() {
         supabase.from('patients').select('*').order('created_at', { ascending:false }).limit(5),
         supabase.from('workflow_executions').select('*, step:workflow_steps(type,template_name), patient:patients(first_name,last_name,phone)').eq('status','pending').not('step', 'is', null).order('scheduled_at').limit(6),
         supabase.from('patient_journeys').select('*, patient:patients(first_name,last_name), treatment:treatments(name,color)').order('updated_at', { ascending:false }).limit(5),
+        supabase.from('factures').select('total_ttc').gte('date_emission', monthStart.split('T')[0]).eq('status', 'payee'),
       ])
 
       // 7-day trend
@@ -60,7 +62,8 @@ export default function DashboardPage() {
         return { ...p, loyaltyScore: score, consultCount: consultCount ?? 0 }
       }))
 
-      setData({ todayAppts: todayAppts ?? [], monthPatients, monthConsults, pendingActions, recentPatients: recentWithScores, pendingExec: pendingExec ?? [], activeJourneys: activeJourneys ?? [], trend })
+      const caMensuel = (facturesMois ?? []).reduce((s: number, f: any) => s + (f.total_ttc ?? 0), 0)
+      setData({ todayAppts: todayAppts ?? [], monthPatients, monthConsults, pendingActions, recentPatients: recentWithScores, pendingExec: pendingExec ?? [], activeJourneys: activeJourneys ?? [], trend, caMensuel })
       setLoading(false)
     }
     load()
@@ -98,6 +101,7 @@ export default function DashboardPage() {
         {/* KPIs */}
         <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:'12px' }}>
           {[
+            { label:'CA ce mois', value: (data.caMensuel ?? 0) >= 1000 ? `${Math.round((data.caMensuel ?? 0)/1000)}k€` : `${Math.round(data.caMensuel ?? 0)}€`, icon:'💰', color:'#059669', bg:'#ECFDF5' },
             { label:'Patients ce mois', value: data.monthPatients ?? 0, icon:'◎', color:'var(--blue)', bg:'var(--blue-light)' },
             { label:'Consultations', value: data.monthConsults ?? 0, icon:'✦', color:'#7C3AED', bg:'#F3EEFF' },
             { label:'Actions en attente', value: data.pendingActions ?? 0, icon:'⚡', color:'#D97706', bg:'#FFFBEB', alert: (data.pendingActions ?? 0) > 0 },

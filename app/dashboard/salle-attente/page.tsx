@@ -54,6 +54,21 @@ export default function SalleAttentePage() {
 
   useEffect(() => { load() }, [load])
 
+  // Realtime updates — actualisation auto quand un statut change
+  useEffect(() => {
+    if (!clinicId) return
+    const channel = supabase
+      .channel('salle-attente-realtime')
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'appointments',
+        filter: `clinic_id=eq.${clinicId}`,
+      }, () => load())
+      .subscribe()
+    return () => { supabase.removeChannel(channel) }
+  }, [clinicId])
+
   function updateStatus(id: string, status: string) {
     setStatuses(prev => ({ ...prev, [id]: status }))
     supabase.from('appointments').update({ status }).eq('id', id)
