@@ -91,9 +91,14 @@ export default function DashboardPage() {
             {now.toLocaleDateString('fr-FR', { weekday:'long', day:'numeric', month:'long' })} · {data.todayAppts.length > 0 ? `${data.todayAppts.length} RDV aujourd'hui` : "Pas de RDV aujourd'hui"}
           </div>
         </div>
-        <Link href="/dashboard/consultations/new" className="btn-primary" style={{ textDecoration:'none' }}>
-          + Nouvelle consultation
-        </Link>
+        <div style={{ display:'flex', gap:8 }}>
+          <Link href="/dashboard/salle-attente" style={{ textDecoration:'none', padding:'7px 14px', borderRadius:9, background:'#ECFEFF', color:'#0891B2', border:'1px solid #A5F3FC', fontSize:13, fontWeight:600, display:'flex', alignItems:'center', gap:6 }}>
+            🏥 Salle d'attente
+          </Link>
+          <Link href="/dashboard/consultations/new" className="btn-primary" style={{ textDecoration:'none' }}>
+            + Nouvelle consultation
+          </Link>
+        </div>
       </div>
 
       <div className="page-content" style={{ display:'flex', flexDirection:'column', gap:'20px' }}>

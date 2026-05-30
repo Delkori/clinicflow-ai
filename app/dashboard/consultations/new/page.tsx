@@ -24,6 +24,8 @@ function ConsultationForm() {
   const [acteId, setActeId]       = useState('')
   const [selectedActe, setSelectedActe] = useState<any>(null)
   const [step, setStep]           = useState<1|2|3>(1)
+  const [stockItems, setStockItems] = useState<any[]>([])
+  const [stockUsage, setStockUsage] = useState<{item_id:string;quantite:number;nom:string}[]>([])
   const [saving, setSaving]       = useState(false)
 
   // Standard fields
@@ -53,12 +55,14 @@ function ConsultationForm() {
       const { data: prof } = await supabase.from('profiles').select('clinic_id').eq('id', user.id).single()
       if (!prof) return
       setClinicId(prof.clinic_id)
-      const [{ data: pts }, { data: acts }] = await Promise.all([
+      const [{ data: pts }, { data: acts }, { data: stockData }] = await Promise.all([
         supabase.from('patients').select('id, first_name, last_name').order('last_name'),
         supabase.from('actes_catalogue').select('*').eq('clinic_id', prof.clinic_id).eq('is_active', true).order('categorie'),
+        supabase.from('stock_items').select('id,nom,stock_actuel,unite').eq('clinic_id', prof.clinic_id).eq('is_active',true).eq('categorie','injectables').order('nom'),
       ])
       setPatients(pts ?? [])
       setActes(acts ?? [])
+      setStockItems(stockData ?? [])
     }
     load()
   }, [])
@@ -144,6 +148,15 @@ function ConsultationForm() {
         method:'POST', headers:{'Content-Type':'application/json'},
         body: JSON.stringify({ trigger_type:'consultation_created', clinic_id: clinicId, patient_id: patientId, trigger_data: { acte: acte?.nom } }),
       })
+      // Save stock usage (decrements via DB trigger)
+      for (const usage of stockUsage) {
+        if (usage.quantite > 0) {
+          await supabase.from('consultation_stock_usage').insert({
+            clinic_id: clinicId, consultation_id: consult.id,
+            item_id: usage.item_id, quantite: usage.quantite,
+          })
+        }
+      }
       router.push(`/dashboard/consultations/${consult.id}`)
     }
   }
@@ -410,6 +423,38 @@ function ConsultationForm() {
                 </div>
               )}
             </div>
+            {/* 💉 Stock injectables utilisés */}
+            {stockItems.length > 0 && (
+              <div className="card" style={{ padding:16, marginTop:12, background:'var(--purple-light)', border:'1px solid rgba(124,58,237,0.15)' }}>
+                <div style={{ fontSize:12, fontWeight:700, color:'var(--gray-700)', marginBottom:10 }}>💉 Injectables utilisés (optionnel)</div>
+                <div style={{ display:'flex', flexDirection:'column', gap:7 }}>
+                  {stockItems.map((item: any) => {
+                    const usage = stockUsage.find(u => u.item_id === item.id)
+                    const qty = usage?.quantite ?? 0
+                    return (
+                      <div key={item.id} style={{ display:'flex', alignItems:'center', gap:10, padding:'7px 10px', background:'white', borderRadius:8 }}>
+                        <span style={{ flex:1, fontSize:12, fontWeight:500 }}>{item.nom}</span>
+                        <span style={{ fontSize:10, color:'var(--gray-400)' }}>Stock: {item.stock_actuel} {item.unite}</span>
+                        <div style={{ display:'flex', alignItems:'center', gap:4 }}>
+                          <button type="button" onClick={() => setStockUsage(prev => { const idx = prev.findIndex(u => u.item_id === item.id); if(idx>=0){const n=[...prev]; const newQty=Math.max(0,n[idx].quantite-0.5); if(newQty===0) n.splice(idx,1); else n[idx]={...n[idx],quantite:newQty}; return n} return prev })}
+                            style={{ width:22,height:22,borderRadius:5,border:'1px solid var(--gray-200)',background:'white',cursor:'pointer',fontSize:13,display:'flex',alignItems:'center',justifyContent:'center',color:'var(--gray-600)' }}>−</button>
+                          <span style={{ fontSize:13,fontWeight:700,minWidth:26,textAlign:'center',color: qty>0 ? 'var(--purple)' : 'var(--gray-400)' }}>{qty}</span>
+                          <button type="button" onClick={() => setStockUsage(prev => { const idx = prev.findIndex(u => u.item_id === item.id); if(idx>=0){const n=[...prev];n[idx]={...n[idx],quantite:n[idx].quantite+0.5};return n} return [...prev,{item_id:item.id,quantite:0.5,nom:item.nom}] })}
+                            style={{ width:22,height:22,borderRadius:5,border:'1px solid rgba(124,58,237,0.3)',background:'var(--purple-light)',cursor:'pointer',fontSize:13,display:'flex',alignItems:'center',justifyContent:'center',color:'var(--purple)' }}>+</button>
+                        </div>
+                        <span style={{ fontSize:10,color:'var(--gray-500)',minWidth:36 }}>{item.unite}</span>
+                      </div>
+                    )
+                  })}
+                </div>
+                {stockUsage.length > 0 && (
+                  <div style={{ marginTop:8,fontSize:11,color:'var(--purple)',fontWeight:500 }}>
+                    ✓ {stockUsage.map(u => `${u.quantite} ${u.nom}`).join(' · ')} — stock mis à jour automatiquement
+                  </div>
+                )}
+              </div>
+            )}
+
 
             <div style={{ display:'flex', gap:8, justifyContent:'space-between' }}>
               <button onClick={() => setStep(2)} className="btn-secondary" style={{ fontSize:13 }}>← Modifier</button>
