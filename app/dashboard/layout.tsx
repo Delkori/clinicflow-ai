@@ -45,6 +45,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const supabase = createClient()
   const [profile, setProfile] = useState<any>(null)
   const [clinic,  setClinic]  = useState<any>(null)
+  const [profileLoaded, setProfileLoaded] = useState(false)
   const [col, setCol]         = useState(false)
   const [unreadCount, setUnreadCount] = useState(0)
   const [trialDaysLeft, setTrialDaysLeft] = useState<number|null>(null)
@@ -57,6 +58,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       supabase.from('profiles').select('*').eq('id', user.id).single().then(({ data }) => {
         if (!data) return
         setProfile(data)
+        setProfileLoaded(true)
         supabase.from('clinics').select('*').eq('id', data.clinic_id).single().then(({ data:c }) => {
           setClinic(c)
           if (c) {
@@ -73,7 +75,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     })
   }, [])
 
-  const isAdmin = ADMIN_ROLES.includes(profile?.role ?? '')
+  // Show outils section as soon as profile loads (medecin/admin role) or while loading (avoid flash)
+  const isAdmin = !profileLoaded || ADMIN_ROLES.includes(profile?.role ?? '')
   const isActive = (href: string, exact?: boolean) =>
     exact ? pathname === href : pathname === href || pathname.startsWith(href + '/')
 
